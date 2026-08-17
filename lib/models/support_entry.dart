@@ -10,10 +10,11 @@ class SupportEntry {
   final int? id;
 
   /// ID des Arbeitstages, zu dem diese Unterstützung gehört.
-  final int workDayId;
+  final String workDayId;
 
   /// Bezirk, den du zusätzlich unterstützt hast.
-  /// Beispiele: "13", "16", "21" oder später auch andere Bezeichnungen.
+  ///
+  /// Beispiele: "13", "16", "21".
   final String district;
 
   /// Anzahl der Pakete, die du von diesem Bezirk übernommen hast.
@@ -24,7 +25,7 @@ class SupportEntry {
 
   SupportEntry copyWith({
     int? id,
-    int? workDayId,
+    String? workDayId,
     String? district,
     int? packagesTaken,
     String? note,
@@ -52,7 +53,7 @@ class SupportEntry {
   factory SupportEntry.fromMap(Map<String, Object?> map) {
     return SupportEntry(
       id: map['id'] as int?,
-      workDayId: map['work_day_id'] as int,
+      workDayId: map['work_day_id'] as String,
       district: map['district'] as String,
       packagesTaken: map['packages_taken'] as int,
       note: map['note'] as String?,

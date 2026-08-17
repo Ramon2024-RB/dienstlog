@@ -13,7 +13,7 @@ class AppDatabase {
   static Database? _database;
 
   static const String _databaseName = 'dienstlog.db';
-  static const int _databaseVersion = 1;
+  static const int _databaseVersion = 2;
 
   Future<Database> get database async {
     if (_database != null) {
@@ -31,11 +31,35 @@ class AppDatabase {
     return openDatabase(
       path,
       version: _databaseVersion,
+      onConfigure: _onConfigure,
       onCreate: _onCreate,
+      onUpgrade: _onUpgrade,
     );
   }
 
+  Future<void> _onConfigure(Database db) async {
+    await db.execute('PRAGMA foreign_keys = ON');
+  }
+
   Future<void> _onCreate(Database db, int version) async {
+    await _createDistrictsTable(db);
+    await _createWorkDaysTable(db);
+    await _createSupportEntriesTable(db);
+
+    await _insertInitialDistricts(db);
+  }
+
+  Future<void> _onUpgrade(
+    Database db,
+    int oldVersion,
+    int newVersion,
+  ) async {
+    if (oldVersion < 2) {
+      await _upgradeFromVersion1ToVersion2(db);
+    }
+  }
+
+  Future<void> _createDistrictsTable(Database db) async {
     await db.execute(
       '''
       CREATE TABLE districts (
@@ -46,26 +70,34 @@ class AppDatabase {
       )
       ''',
     );
+  }
 
+  Future<void> _createWorkDaysTable(Database db) async {
     await db.execute(
       '''
       CREATE TABLE work_days (
         id TEXT PRIMARY KEY,
         date TEXT NOT NULL UNIQUE,
         type TEXT NOT NULL,
+        assignment_type TEXT NOT NULL DEFAULT 'ownDistrict',
         district_id TEXT,
+        district_part TEXT NOT NULL DEFAULT 'full',
         work_start INTEGER,
+        departure_time INTEGER,
+        delivery_end INTEGER,
         work_end INTEGER,
         break_minutes INTEGER NOT NULL DEFAULT 0,
-        delivery_start INTEGER,
-        delivery_end INTEGER,
         package_count INTEGER NOT NULL DEFAULT 0,
-        is_package_driver INTEGER NOT NULL DEFAULT 0,
+        cancelled_package_count INTEGER NOT NULL DEFAULT 0,
+        has_advertising INTEGER NOT NULL DEFAULT 0,
+        advertising TEXT,
         notes TEXT
       )
       ''',
     );
+  }
 
+  Future<void> _createSupportEntriesTable(Database db) async {
     await db.execute(
       '''
       CREATE TABLE support_entries (
@@ -80,8 +112,70 @@ class AppDatabase {
       )
       ''',
     );
+  }
 
-    await _insertInitialDistricts(db);
+  Future<void> _upgradeFromVersion1ToVersion2(Database db) async {
+    await db.transaction((txn) async {
+      await txn.execute(
+        '''
+        ALTER TABLE work_days
+        ADD COLUMN assignment_type TEXT NOT NULL DEFAULT 'ownDistrict'
+        ''',
+      );
+
+      await txn.execute(
+        '''
+        ALTER TABLE work_days
+        ADD COLUMN district_part TEXT NOT NULL DEFAULT 'full'
+        ''',
+      );
+
+      await txn.execute(
+        '''
+        ALTER TABLE work_days
+        ADD COLUMN departure_time INTEGER
+        ''',
+      );
+
+      await txn.execute(
+        '''
+        ALTER TABLE work_days
+        ADD COLUMN cancelled_package_count INTEGER NOT NULL DEFAULT 0
+        ''',
+      );
+
+      await txn.execute(
+        '''
+        ALTER TABLE work_days
+        ADD COLUMN has_advertising INTEGER NOT NULL DEFAULT 0
+        ''',
+      );
+
+      await txn.execute(
+        '''
+        ALTER TABLE work_days
+        ADD COLUMN advertising TEXT
+        ''',
+      );
+
+      await txn.execute(
+        '''
+        UPDATE work_days
+        SET assignment_type = CASE
+          WHEN is_package_driver = 1 THEN 'packageDriver'
+          ELSE 'ownDistrict'
+        END
+        ''',
+      );
+
+      await txn.execute(
+        '''
+        UPDATE work_days
+        SET departure_time = delivery_start
+        WHERE departure_time IS NULL
+        ''',
+      );
+    });
   }
 
   Future<void> _insertInitialDistricts(Database db) async {
@@ -329,7 +423,17 @@ class AppDatabase {
       [workDayId],
     );
 
-    return (result.first['total'] as int?) ?? 0;
+    final value = result.first['total'];
+
+    if (value is int) {
+      return value;
+    }
+
+    if (value is num) {
+      return value.toInt();
+    }
+
+    return 0;
   }
 
   Future<void> close() async {

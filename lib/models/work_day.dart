@@ -6,63 +6,96 @@ enum WorkDayType {
   sick,
 }
 
+enum WorkAssignmentType {
+  ownDistrict,
+  packageDriver,
+}
+
+enum DistrictPart {
+  full,
+  partA,
+  partB,
+}
+
 class WorkDay {
   const WorkDay({
     required this.id,
     required this.date,
     required this.type,
+    this.assignmentType = WorkAssignmentType.ownDistrict,
     this.districtId,
+    this.districtPart = DistrictPart.full,
     this.workStart,
+    this.departureTime,
+    this.deliveryEnd,
     this.workEnd,
     this.breakMinutes = 0,
-    this.deliveryStart,
-    this.deliveryEnd,
     this.packageCount = 0,
-    this.isPackageDriver = false,
+    this.cancelledPackageCount = 0,
+    this.hasAdvertising = false,
+    this.advertising,
     this.notes,
   });
 
   final String id;
+
+  /// Datum des Eintrags.
   final DateTime date;
+
+  /// Arbeit, Frei, Urlaub, Feiertag oder Krank.
   final WorkDayType type;
 
-  /// Eigener regulärer Bezirk an diesem Arbeitstag.
+  /// Regulärer eigener Bezirk oder zusätzlicher Paketfahrer.
+  final WorkAssignmentType assignmentType;
+
+  /// Eigener regulärer Bezirk.
   ///
-  /// Bei einem reinen Paketfahrer-/Unterstützungstag kann dieser Wert null sein.
+  /// Bei einem Paketfahrer-Tag kann dieser Wert leer bleiben.
   final String? districtId;
 
-  /// Arbeitsbeginn, gespeichert als Minuten seit Mitternacht.
+  /// Ganzer Bezirk, A-Teil oder B-Teil.
+  final DistrictPart districtPart;
+
+  /// Arbeitsbeginn in Minuten seit Mitternacht.
   ///
   /// Beispiel:
-  /// 07:30 Uhr = 450 Minuten.
+  /// 07:30 Uhr = 450.
   final int? workStart;
 
-  /// Arbeitsende, gespeichert als Minuten seit Mitternacht.
-  final int? workEnd;
+  /// Tatsächliche Abfahrt in Minuten seit Mitternacht.
+  final int? departureTime;
 
-  /// Pausenzeit in Minuten.
-  final int breakMinutes;
-
-  /// Beginn der eigentlichen Zustellung in Minuten seit Mitternacht.
-  final int? deliveryStart;
-
-  /// Ende der eigentlichen Zustellung in Minuten seit Mitternacht.
+  /// Ende der Zustellung in Minuten seit Mitternacht.
   final int? deliveryEnd;
 
-  /// Paketmenge des eigenen Bezirks.
+  /// Arbeitsende in Minuten seit Mitternacht.
+  final int? workEnd;
+
+  /// Pause in Minuten.
+  final int breakMinutes;
+
+  /// Paketmenge der eigenen regulären Tour.
   ///
-  /// Übernommene Pakete aus Unterstützungen werden später getrennt
+  /// Übernommene Pakete aus Unterstützungen werden separat
   /// über SupportEntry gespeichert.
   final int packageCount;
 
-  /// true bedeutet:
-  /// An diesem Tag war der Nutzer als zusätzlicher Paketfahrer eingesetzt.
-  ///
-  /// Die 25 regulären Bezirke bleiben dabei weiterhin durch ihre
-  /// jeweiligen Zusteller besetzt.
-  final bool isPackageDriver;
+  /// Anzahl der abgebrochenen bzw. nicht zugestellten Pakete.
+  final int cancelledPackageCount;
 
+  /// Gibt an, ob an diesem Tag Werbung mitgenommen wurde.
+  final bool hasAdvertising;
+
+  /// Bezeichnung der mitgenommenen Werbung.
+  final String? advertising;
+
+  /// Freie Bemerkungen zum Arbeitstag.
   final String? notes;
+
+  bool get isWorkDay => type == WorkDayType.work;
+
+  bool get isPackageDriver =>
+      assignmentType == WorkAssignmentType.packageDriver;
 
   int? get workDurationMinutes {
     if (workStart == null || workEnd == null) {
@@ -79,11 +112,11 @@ class WorkDay {
   }
 
   int? get deliveryDurationMinutes {
-    if (deliveryStart == null || deliveryEnd == null) {
+    if (departureTime == null || deliveryEnd == null) {
       return null;
     }
 
-    final duration = deliveryEnd! - deliveryStart!;
+    final duration = deliveryEnd! - departureTime!;
 
     if (duration < 0) {
       return null;
@@ -92,23 +125,38 @@ class WorkDay {
     return duration;
   }
 
+  int get deliveredPackageCount {
+    final delivered = packageCount - cancelledPackageCount;
+
+    if (delivered < 0) {
+      return 0;
+    }
+
+    return delivered;
+  }
+
   WorkDay copyWith({
     String? id,
     DateTime? date,
     WorkDayType? type,
+    WorkAssignmentType? assignmentType,
     String? districtId,
     bool clearDistrictId = false,
+    DistrictPart? districtPart,
     int? workStart,
     bool clearWorkStart = false,
+    int? departureTime,
+    bool clearDepartureTime = false,
+    int? deliveryEnd,
+    bool clearDeliveryEnd = false,
     int? workEnd,
     bool clearWorkEnd = false,
     int? breakMinutes,
-    int? deliveryStart,
-    bool clearDeliveryStart = false,
-    int? deliveryEnd,
-    bool clearDeliveryEnd = false,
     int? packageCount,
-    bool? isPackageDriver,
+    int? cancelledPackageCount,
+    bool? hasAdvertising,
+    String? advertising,
+    bool clearAdvertising = false,
     String? notes,
     bool clearNotes = false,
   }) {
@@ -116,15 +164,27 @@ class WorkDay {
       id: id ?? this.id,
       date: date ?? this.date,
       type: type ?? this.type,
-      districtId: clearDistrictId ? null : districtId ?? this.districtId,
-      workStart: clearWorkStart ? null : workStart ?? this.workStart,
-      workEnd: clearWorkEnd ? null : workEnd ?? this.workEnd,
+      assignmentType: assignmentType ?? this.assignmentType,
+      districtId:
+          clearDistrictId ? null : districtId ?? this.districtId,
+      districtPart: districtPart ?? this.districtPart,
+      workStart:
+          clearWorkStart ? null : workStart ?? this.workStart,
+      departureTime: clearDepartureTime
+          ? null
+          : departureTime ?? this.departureTime,
+      deliveryEnd:
+          clearDeliveryEnd ? null : deliveryEnd ?? this.deliveryEnd,
+      workEnd:
+          clearWorkEnd ? null : workEnd ?? this.workEnd,
       breakMinutes: breakMinutes ?? this.breakMinutes,
-      deliveryStart:
-          clearDeliveryStart ? null : deliveryStart ?? this.deliveryStart,
-      deliveryEnd: clearDeliveryEnd ? null : deliveryEnd ?? this.deliveryEnd,
       packageCount: packageCount ?? this.packageCount,
-      isPackageDriver: isPackageDriver ?? this.isPackageDriver,
+      cancelledPackageCount:
+          cancelledPackageCount ?? this.cancelledPackageCount,
+      hasAdvertising: hasAdvertising ?? this.hasAdvertising,
+      advertising: clearAdvertising
+          ? null
+          : advertising ?? this.advertising,
       notes: clearNotes ? null : notes ?? this.notes,
     );
   }
@@ -134,14 +194,18 @@ class WorkDay {
       'id': id,
       'date': _dateToDatabase(date),
       'type': type.name,
+      'assignment_type': assignmentType.name,
       'district_id': districtId,
+      'district_part': districtPart.name,
       'work_start': workStart,
+      'departure_time': departureTime,
+      'delivery_end': deliveryEnd,
       'work_end': workEnd,
       'break_minutes': breakMinutes,
-      'delivery_start': deliveryStart,
-      'delivery_end': deliveryEnd,
       'package_count': packageCount,
-      'is_package_driver': isPackageDriver ? 1 : 0,
+      'cancelled_package_count': cancelledPackageCount,
+      'has_advertising': hasAdvertising ? 1 : 0,
+      'advertising': advertising,
       'notes': notes,
     };
   }
@@ -154,14 +218,26 @@ class WorkDay {
         (type) => type.name == map['type'],
         orElse: () => WorkDayType.work,
       ),
+      assignmentType: WorkAssignmentType.values.firstWhere(
+        (type) => type.name == map['assignment_type'],
+        orElse: () => WorkAssignmentType.ownDistrict,
+      ),
       districtId: map['district_id'] as String?,
+      districtPart: DistrictPart.values.firstWhere(
+        (part) => part.name == map['district_part'],
+        orElse: () => DistrictPart.full,
+      ),
       workStart: map['work_start'] as int?,
+      departureTime: map['departure_time'] as int?,
+      deliveryEnd: map['delivery_end'] as int?,
       workEnd: map['work_end'] as int?,
       breakMinutes: (map['break_minutes'] as int?) ?? 0,
-      deliveryStart: map['delivery_start'] as int?,
-      deliveryEnd: map['delivery_end'] as int?,
       packageCount: (map['package_count'] as int?) ?? 0,
-      isPackageDriver: (map['is_package_driver'] as int? ?? 0) == 1,
+      cancelledPackageCount:
+          (map['cancelled_package_count'] as int?) ?? 0,
+      hasAdvertising:
+          (map['has_advertising'] as int? ?? 0) == 1,
+      advertising: map['advertising'] as String?,
       notes: map['notes'] as String?,
     );
   }

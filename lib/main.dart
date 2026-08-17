@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'screens/districts/districts_page.dart';
+
 void main() {
   runApp(
     const ProviderScope(
@@ -338,7 +340,13 @@ class _MorePage extends StatelessWidget {
                   title: const Text('Bezirke'),
                   subtitle: const Text('25 Bezirke verwalten'),
                   trailing: const Icon(Icons.chevron_right),
-                  onTap: () {},
+                  onTap: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute<void>(
+                        builder: (context) => const DistrictsPage(),
+                      ),
+                    );
+                  },
                 ),
                 const Divider(height: 1),
                 ListTile(

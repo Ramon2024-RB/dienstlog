@@ -5,6 +5,7 @@ import '../models/district.dart';
 import '../models/own_tour_entry.dart';
 import '../models/support_entry.dart';
 import '../models/work_day.dart';
+import '../models/work_schedule_entry.dart';
 
 class AppDatabase {
   AppDatabase._();
@@ -14,7 +15,7 @@ class AppDatabase {
   static Database? _database;
 
   static const String _databaseName = 'dienstlog.db';
-  static const int _databaseVersion = 3;
+  static const int _databaseVersion = 4;
 
   Future<Database> get database async {
     if (_database != null) {
@@ -47,6 +48,7 @@ class AppDatabase {
     await _createWorkDaysTable(db);
     await _createSupportEntriesTable(db);
     await _createOwnTourEntriesTable(db);
+    await _createWorkScheduleEntriesTable(db);
 
     await _insertInitialDistricts(db);
   }
@@ -62,6 +64,10 @@ class AppDatabase {
 
     if (oldVersion < 3) {
       await _upgradeFromVersion2ToVersion3(db);
+    }
+
+    if (oldVersion < 4) {
+      await _upgradeFromVersion3ToVersion4(db);
     }
   }
 
@@ -133,6 +139,22 @@ class AppDatabase {
         FOREIGN KEY (work_day_id)
           REFERENCES work_days(id)
           ON DELETE CASCADE
+      )
+      ''',
+    );
+  }
+
+  Future<void> _createWorkScheduleEntriesTable(
+    Database db,
+  ) async {
+    await db.execute(
+      '''
+      CREATE TABLE work_schedule_entries (
+        id TEXT PRIMARY KEY,
+        date TEXT NOT NULL UNIQUE,
+        type TEXT NOT NULL,
+        districts TEXT NOT NULL DEFAULT '',
+        notes TEXT
       )
       ''',
     );
@@ -243,6 +265,10 @@ class AppDatabase {
         ''',
       );
     });
+  }
+
+  Future<void> _upgradeFromVersion3ToVersion4(Database db) async {
+    await _createWorkScheduleEntriesTable(db);
   }
 
   Future<void> _insertInitialDistricts(Database db) async {
@@ -773,6 +799,123 @@ class AppDatabase {
 
     return _readIntValue(
       result.first['total'],
+    );
+  }
+
+  Future<List<WorkScheduleEntry>> getWorkScheduleEntries() async {
+    final db = await database;
+
+    final maps = await db.query(
+      'work_schedule_entries',
+      orderBy: 'date ASC',
+    );
+
+    return maps.map(WorkScheduleEntry.fromMap).toList();
+  }
+
+  Future<WorkScheduleEntry?> getWorkScheduleEntryById(
+    String id,
+  ) async {
+    final db = await database;
+
+    final maps = await db.query(
+      'work_schedule_entries',
+      where: 'id = ?',
+      whereArgs: [id],
+      limit: 1,
+    );
+
+    if (maps.isEmpty) {
+      return null;
+    }
+
+    return WorkScheduleEntry.fromMap(maps.first);
+  }
+
+  Future<WorkScheduleEntry?> getWorkScheduleEntryByDate(
+    DateTime date,
+  ) async {
+    final db = await database;
+
+    final normalizedDate = _normalizeDate(
+      date,
+    );
+
+    final maps = await db.query(
+      'work_schedule_entries',
+      where: 'date = ?',
+      whereArgs: [normalizedDate],
+      limit: 1,
+    );
+
+    if (maps.isEmpty) {
+      return null;
+    }
+
+    return WorkScheduleEntry.fromMap(maps.first);
+  }
+
+  Future<List<WorkScheduleEntry>> getWorkScheduleEntriesForDateRange(
+    DateTime startDate,
+    DateTime endDate,
+  ) async {
+    final db = await database;
+
+    final normalizedStartDate = _normalizeDate(
+      startDate,
+    );
+
+    final normalizedEndDate = _normalizeDate(
+      endDate,
+    );
+
+    final maps = await db.query(
+      'work_schedule_entries',
+      where: 'date >= ? AND date <= ?',
+      whereArgs: [
+        normalizedStartDate,
+        normalizedEndDate,
+      ],
+      orderBy: 'date ASC',
+    );
+
+    return maps.map(WorkScheduleEntry.fromMap).toList();
+  }
+
+  Future<void> insertWorkScheduleEntry(
+    WorkScheduleEntry entry,
+  ) async {
+    final db = await database;
+
+    await db.insert(
+      'work_schedule_entries',
+      entry.toMap(),
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  Future<void> updateWorkScheduleEntry(
+    WorkScheduleEntry entry,
+  ) async {
+    final db = await database;
+
+    await db.update(
+      'work_schedule_entries',
+      entry.toMap(),
+      where: 'id = ?',
+      whereArgs: [entry.id],
+    );
+  }
+
+  Future<void> deleteWorkScheduleEntry(
+    String id,
+  ) async {
+    final db = await database;
+
+    await db.delete(
+      'work_schedule_entries',
+      where: 'id = ?',
+      whereArgs: [id],
     );
   }
 

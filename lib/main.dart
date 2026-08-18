@@ -7,6 +7,7 @@ import 'models/work_day.dart';
 import 'screens/calendar/calendar_page.dart';
 import 'screens/districts/districts_page.dart';
 import 'screens/statistics/statistics_page.dart';
+import 'screens/work_schedule/work_schedule_page.dart';
 import 'screens/work_days/add_work_day_page.dart';
 import 'services/work_day_provider.dart';
 
@@ -69,6 +70,7 @@ class _MainNavigationPageState
 
   static const List<Widget> _pages = [
     _OverviewPage(),
+    WorkSchedulePage(),
     CalendarPage(),
     StatisticsPage(),
     _MorePage(),
@@ -94,7 +96,12 @@ class _MainNavigationPageState
           NavigationDestination(
             icon: Icon(Icons.home_outlined),
             selectedIcon: Icon(Icons.home),
-            label: 'Übersicht',
+            label: 'Startseite',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.event_note_outlined),
+            selectedIcon: Icon(Icons.event_note),
+            label: 'Arbeitsplan',
           ),
           NavigationDestination(
             icon: Icon(Icons.calendar_month_outlined),

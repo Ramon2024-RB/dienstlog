@@ -123,15 +123,26 @@ class _CalendarPageState extends ConsumerState<CalendarPage> {
     WorkDay? existingWorkDay,
   ) async {
     if (existingWorkDay != null) {
-      final supportEntries = await ref
-          .read(workDayProvider.notifier)
-          .getSupportEntries(existingWorkDay.id);
+      final notifier = ref.read(
+        workDayProvider.notifier,
+      );
+
+      final ownTourEntries =
+          await notifier.getOwnTourEntries(
+        existingWorkDay.id,
+      );
+
+      final supportEntries =
+          await notifier.getSupportEntries(
+        existingWorkDay.id,
+      );
 
       if (!mounted) {
         return;
       }
 
-      final action = await showModalBottomSheet<_WorkDayAction>(
+      final action =
+          await showModalBottomSheet<_WorkDayAction>(
         context: context,
         showDragHandle: true,
         builder: (context) {
@@ -152,6 +163,7 @@ class _CalendarPageState extends ConsumerState<CalendarPage> {
               return AddWorkDayPage(
                 initialDate: existingWorkDay.date,
                 existingWorkDay: existingWorkDay,
+                initialOwnTourEntries: ownTourEntries,
                 initialSupportEntries: supportEntries,
               );
             },
@@ -676,12 +688,16 @@ class _CalendarDayCell extends StatelessWidget {
         }
 
         return Icons.work_outline;
+
       case WorkDayType.free:
         return Icons.weekend_outlined;
+
       case WorkDayType.vacation:
         return Icons.beach_access_outlined;
+
       case WorkDayType.holiday:
         return Icons.celebration_outlined;
+
       case WorkDayType.sick:
         return Icons.sick_outlined;
     }
@@ -786,12 +802,16 @@ class _ExistingWorkDaySheet extends StatelessWidget {
         return workDay.districtId == null
             ? 'Arbeit'
             : 'Bezirk ${workDay.districtId}';
+
       case WorkDayType.free:
         return 'Frei';
+
       case WorkDayType.vacation:
         return 'Urlaub';
+
       case WorkDayType.holiday:
         return 'Feiertag';
+
       case WorkDayType.sick:
         return 'Krank';
     }

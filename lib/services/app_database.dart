@@ -2,6 +2,7 @@ import 'package:path/path.dart';
 import 'package:sqflite/sqflite.dart';
 
 import '../models/district.dart';
+import '../models/own_tour_entry.dart';
 import '../models/support_entry.dart';
 import '../models/work_day.dart';
 
@@ -13,7 +14,7 @@ class AppDatabase {
   static Database? _database;
 
   static const String _databaseName = 'dienstlog.db';
-  static const int _databaseVersion = 2;
+  static const int _databaseVersion = 3;
 
   Future<Database> get database async {
     if (_database != null) {
@@ -45,6 +46,7 @@ class AppDatabase {
     await _createDistrictsTable(db);
     await _createWorkDaysTable(db);
     await _createSupportEntriesTable(db);
+    await _createOwnTourEntriesTable(db);
 
     await _insertInitialDistricts(db);
   }
@@ -56,6 +58,10 @@ class AppDatabase {
   ) async {
     if (oldVersion < 2) {
       await _upgradeFromVersion1ToVersion2(db);
+    }
+
+    if (oldVersion < 3) {
+      await _upgradeFromVersion2ToVersion3(db);
     }
   }
 
@@ -106,6 +112,24 @@ class AppDatabase {
         district TEXT NOT NULL,
         packages_taken INTEGER NOT NULL DEFAULT 0,
         note TEXT,
+        FOREIGN KEY (work_day_id)
+          REFERENCES work_days(id)
+          ON DELETE CASCADE
+      )
+      ''',
+    );
+  }
+
+  Future<void> _createOwnTourEntriesTable(Database db) async {
+    await db.execute(
+      '''
+      CREATE TABLE own_tour_entries (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        work_day_id TEXT NOT NULL,
+        district TEXT NOT NULL,
+        district_part TEXT NOT NULL DEFAULT 'full',
+        package_count INTEGER NOT NULL DEFAULT 0,
+        cancelled_package_count INTEGER NOT NULL DEFAULT 0,
         FOREIGN KEY (work_day_id)
           REFERENCES work_days(id)
           ON DELETE CASCADE
@@ -173,6 +197,49 @@ class AppDatabase {
         UPDATE work_days
         SET departure_time = delivery_start
         WHERE departure_time IS NULL
+        ''',
+      );
+    });
+  }
+
+  Future<void> _upgradeFromVersion2ToVersion3(Database db) async {
+    await db.transaction((txn) async {
+      await txn.execute(
+        '''
+        CREATE TABLE own_tour_entries (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          work_day_id TEXT NOT NULL,
+          district TEXT NOT NULL,
+          district_part TEXT NOT NULL DEFAULT 'full',
+          package_count INTEGER NOT NULL DEFAULT 0,
+          cancelled_package_count INTEGER NOT NULL DEFAULT 0,
+          FOREIGN KEY (work_day_id)
+            REFERENCES work_days(id)
+            ON DELETE CASCADE
+        )
+        ''',
+      );
+
+      await txn.execute(
+        '''
+        INSERT INTO own_tour_entries (
+          work_day_id,
+          district,
+          district_part,
+          package_count,
+          cancelled_package_count
+        )
+        SELECT
+          id,
+          district_id,
+          district_part,
+          package_count,
+          cancelled_package_count
+        FROM work_days
+        WHERE type = 'work'
+          AND assignment_type = 'ownDistrict'
+          AND district_id IS NOT NULL
+          AND TRIM(district_id) != ''
         ''',
       );
     });
@@ -313,6 +380,12 @@ class AppDatabase {
 
     await db.transaction((txn) async {
       await txn.delete(
+        'own_tour_entries',
+        where: 'work_day_id = ?',
+        whereArgs: [id],
+      );
+
+      await txn.delete(
         'support_entries',
         where: 'work_day_id = ?',
         whereArgs: [id],
@@ -324,6 +397,167 @@ class AppDatabase {
         whereArgs: [id],
       );
     });
+  }
+
+  Future<List<OwnTourEntry>> getOwnTourEntriesForWorkDay(
+    String workDayId,
+  ) async {
+    final db = await database;
+
+    final maps = await db.query(
+      'own_tour_entries',
+      where: 'work_day_id = ?',
+      whereArgs: [workDayId],
+      orderBy: 'id ASC',
+    );
+
+    return maps.map(OwnTourEntry.fromMap).toList();
+  }
+
+  Future<int> insertOwnTourEntry(
+    OwnTourEntry entry,
+  ) async {
+    final db = await database;
+
+    final map = entry.toMap()
+      ..remove('id');
+
+    return db.insert(
+      'own_tour_entries',
+      map,
+    );
+  }
+
+  Future<void> updateOwnTourEntry(
+    OwnTourEntry entry,
+  ) async {
+    if (entry.id == null) {
+      throw ArgumentError(
+        'OwnTourEntry muss eine ID besitzen, um aktualisiert zu werden.',
+      );
+    }
+
+    final db = await database;
+
+    await db.update(
+      'own_tour_entries',
+      entry.toMap(),
+      where: 'id = ?',
+      whereArgs: [entry.id],
+    );
+  }
+
+  Future<void> deleteOwnTourEntry(int id) async {
+    final db = await database;
+
+    await db.delete(
+      'own_tour_entries',
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+  }
+
+  Future<void> replaceOwnTourEntriesForWorkDay(
+    String workDayId,
+    List<OwnTourEntry> entries,
+  ) async {
+    final db = await database;
+
+    await db.transaction((txn) async {
+      await txn.delete(
+        'own_tour_entries',
+        where: 'work_day_id = ?',
+        whereArgs: [workDayId],
+      );
+
+      for (final entry in entries) {
+        final map = entry
+            .copyWith(
+              workDayId: workDayId,
+              clearId: true,
+            )
+            .toMap()
+          ..remove('id');
+
+        await txn.insert(
+          'own_tour_entries',
+          map,
+        );
+      }
+    });
+  }
+
+  Future<int> getTotalOwnTourPackagesForWorkDay(
+    String workDayId,
+  ) async {
+    final db = await database;
+
+    final result = await db.rawQuery(
+      '''
+      SELECT COALESCE(
+        SUM(
+          CASE
+            WHEN package_count - cancelled_package_count < 0
+              THEN 0
+            ELSE package_count - cancelled_package_count
+          END
+        ),
+        0
+      ) AS total
+      FROM own_tour_entries
+      WHERE work_day_id = ?
+      ''',
+      [workDayId],
+    );
+
+    return _readIntValue(
+      result.first['total'],
+    );
+  }
+
+  Future<int> getTotalOwnTourPackagesForDateRange(
+    DateTime startDate,
+    DateTime endDate,
+  ) async {
+    final db = await database;
+
+    final normalizedStartDate = _normalizeDate(
+      startDate,
+    );
+
+    final normalizedEndDate = _normalizeDate(
+      endDate,
+    );
+
+    final result = await db.rawQuery(
+      '''
+      SELECT COALESCE(
+        SUM(
+          CASE
+            WHEN ote.package_count - ote.cancelled_package_count < 0
+              THEN 0
+            ELSE ote.package_count - ote.cancelled_package_count
+          END
+        ),
+        0
+      ) AS total
+      FROM own_tour_entries ote
+      INNER JOIN work_days wd
+        ON wd.id = ote.work_day_id
+      WHERE wd.date >= ?
+        AND wd.date <= ?
+        AND wd.type = ?
+      ''',
+      [
+        normalizedStartDate,
+        normalizedEndDate,
+        WorkDayType.work.name,
+      ],
+    );
+
+    return _readIntValue(
+      result.first['total'],
+    );
   }
 
   Future<List<SupportEntry>> getSupportEntriesForWorkDay(
@@ -341,7 +575,9 @@ class AppDatabase {
     return maps.map(SupportEntry.fromMap).toList();
   }
 
-  Future<int> insertSupportEntry(SupportEntry entry) async {
+  Future<int> insertSupportEntry(
+    SupportEntry entry,
+  ) async {
     final db = await database;
 
     final map = entry.toMap()
@@ -353,7 +589,9 @@ class AppDatabase {
     );
   }
 
-  Future<void> updateSupportEntry(SupportEntry entry) async {
+  Future<void> updateSupportEntry(
+    SupportEntry entry,
+  ) async {
     if (entry.id == null) {
       throw ArgumentError(
         'SupportEntry muss eine ID besitzen, um aktualisiert zu werden.',
@@ -423,14 +661,66 @@ class AppDatabase {
       [workDayId],
     );
 
-    final value = result.first['total'];
+    return _readIntValue(
+      result.first['total'],
+    );
+  }
 
+  Future<int> getTotalSupportPackagesForDateRange(
+    DateTime startDate,
+    DateTime endDate,
+  ) async {
+    final db = await database;
+
+    final normalizedStartDate = _normalizeDate(
+      startDate,
+    );
+
+    final normalizedEndDate = _normalizeDate(
+      endDate,
+    );
+
+    final result = await db.rawQuery(
+      '''
+      SELECT COALESCE(SUM(se.packages_taken), 0) AS total
+      FROM support_entries se
+      INNER JOIN work_days wd
+        ON wd.id = se.work_day_id
+      WHERE wd.date >= ?
+        AND wd.date <= ?
+        AND wd.type = ?
+      ''',
+      [
+        normalizedStartDate,
+        normalizedEndDate,
+        WorkDayType.work.name,
+      ],
+    );
+
+    return _readIntValue(
+      result.first['total'],
+    );
+  }
+
+  String _normalizeDate(DateTime date) {
+    return DateTime(
+      date.year,
+      date.month,
+      date.day,
+    ).toIso8601String();
+  }
+
+  int _readIntValue(Object? value) {
     if (value is int) {
       return value;
     }
 
     if (value is num) {
       return value.toInt();
+    }
+
+    if (value is String) {
+      return int.tryParse(value) ?? 0;
     }
 
     return 0;

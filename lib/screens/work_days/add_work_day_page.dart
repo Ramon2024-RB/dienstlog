@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../models/district.dart';
+import '../../models/own_tour_entry.dart';
 import '../../models/support_entry.dart';
 import '../../models/work_day.dart';
 import '../../services/district_provider.dart';
@@ -13,25 +14,26 @@ class AddWorkDayPage extends ConsumerStatefulWidget {
     super.key,
     this.initialDate,
     this.existingWorkDay,
+    this.initialOwnTourEntries = const [],
     this.initialSupportEntries = const [],
   });
 
   final DateTime? initialDate;
   final WorkDay? existingWorkDay;
+  final List<OwnTourEntry> initialOwnTourEntries;
   final List<SupportEntry> initialSupportEntries;
 
   @override
-  ConsumerState<AddWorkDayPage> createState() => _AddWorkDayPageState();
+  ConsumerState<AddWorkDayPage> createState() =>
+      _AddWorkDayPageState();
 }
 
 class _AddWorkDayPageState extends ConsumerState<AddWorkDayPage> {
   late DateTime _date;
 
   WorkDayType _type = WorkDayType.work;
-  WorkAssignmentType _assignmentType = WorkAssignmentType.ownDistrict;
-  DistrictPart _districtPart = DistrictPart.full;
-
-  int? _districtNumber;
+  WorkAssignmentType _assignmentType =
+      WorkAssignmentType.ownDistrict;
 
   TimeOfDay? _workStart;
   TimeOfDay? _departureTime;
@@ -40,18 +42,13 @@ class _AddWorkDayPageState extends ConsumerState<AddWorkDayPage> {
 
   int _breakMinutes = 0;
 
-  final TextEditingController _packageCountController =
-      TextEditingController();
-
-  final TextEditingController _cancelledPackageCountController =
-      TextEditingController();
-
   final TextEditingController _advertisingController =
       TextEditingController();
 
   final TextEditingController _notesController =
       TextEditingController();
 
+  final List<_OwnTourDraft> _ownTourDrafts = [];
   final List<_SupportDraft> _supportDrafts = [];
 
   bool _hasAdvertising = false;
@@ -72,23 +69,27 @@ class _AddWorkDayPageState extends ConsumerState<AddWorkDayPage> {
 
       _type = existingWorkDay.type;
       _assignmentType = existingWorkDay.assignmentType;
-      _districtPart = existingWorkDay.districtPart;
-      _districtNumber = int.tryParse(existingWorkDay.districtId ?? '');
 
-      _workStart = _minutesToTime(existingWorkDay.workStart);
-      _departureTime = _minutesToTime(existingWorkDay.departureTime);
-      _deliveryEnd = _minutesToTime(existingWorkDay.deliveryEnd);
-      _workEnd = _minutesToTime(existingWorkDay.workEnd);
+      _workStart = _minutesToTime(
+        existingWorkDay.workStart,
+      );
+
+      _departureTime = _minutesToTime(
+        existingWorkDay.departureTime,
+      );
+
+      _deliveryEnd = _minutesToTime(
+        existingWorkDay.deliveryEnd,
+      );
+
+      _workEnd = _minutesToTime(
+        existingWorkDay.workEnd,
+      );
 
       _breakMinutes = existingWorkDay.breakMinutes;
 
-      _packageCountController.text =
-          '${existingWorkDay.packageCount}';
-
-      _cancelledPackageCountController.text =
-          '${existingWorkDay.cancelledPackageCount}';
-
-      _hasAdvertising = existingWorkDay.hasAdvertising;
+      _hasAdvertising =
+          existingWorkDay.hasAdvertising;
 
       _advertisingController.text =
           existingWorkDay.advertising ?? '';
@@ -96,7 +97,27 @@ class _AddWorkDayPageState extends ConsumerState<AddWorkDayPage> {
       _notesController.text =
           existingWorkDay.notes ?? '';
 
-      for (final entry in widget.initialSupportEntries) {
+      if (widget.initialOwnTourEntries.isNotEmpty) {
+        for (final entry
+            in widget.initialOwnTourEntries) {
+          _ownTourDrafts.add(
+            _OwnTourDraft.fromEntry(entry),
+          );
+        }
+      } else if (existingWorkDay.type ==
+              WorkDayType.work &&
+          existingWorkDay.assignmentType ==
+              WorkAssignmentType.ownDistrict &&
+          existingWorkDay.districtId != null) {
+        _ownTourDrafts.add(
+          _OwnTourDraft.fromLegacyWorkDay(
+            existingWorkDay,
+          ),
+        );
+      }
+
+      for (final entry
+          in widget.initialSupportEntries) {
         _supportDrafts.add(
           _SupportDraft.fromEntry(entry),
         );
@@ -110,15 +131,21 @@ class _AddWorkDayPageState extends ConsumerState<AddWorkDayPage> {
         initialDate.month,
         initialDate.day,
       );
+
+      _ownTourDrafts.add(
+        _OwnTourDraft(),
+      );
     }
   }
 
   @override
   void dispose() {
-    _packageCountController.dispose();
-    _cancelledPackageCountController.dispose();
     _advertisingController.dispose();
     _notesController.dispose();
+
+    for (final draft in _ownTourDrafts) {
+      draft.dispose();
+    }
 
     for (final draft in _supportDrafts) {
       draft.dispose();
@@ -168,9 +195,13 @@ class _AddWorkDayPageState extends ConsumerState<AddWorkDayPage> {
                   const SizedBox(height: 16),
                   FilledButton.icon(
                     onPressed: () {
-                      ref.invalidate(districtProvider);
+                      ref.invalidate(
+                        districtProvider,
+                      );
                     },
-                    icon: const Icon(Icons.refresh),
+                    icon: const Icon(
+                      Icons.refresh,
+                    ),
                     label: const Text(
                       'Erneut versuchen',
                     ),
@@ -181,13 +212,12 @@ class _AddWorkDayPageState extends ConsumerState<AddWorkDayPage> {
           );
         },
         data: (districts) {
-          final activeDistricts =
-              districts
-                  .where(
-                    (district) =>
-                        district.isActive,
-                  )
-                  .toList();
+          final activeDistricts = districts
+              .where(
+                (district) =>
+                    district.isActive,
+              )
+              .toList();
 
           return _buildForm(
             context,
@@ -219,19 +249,16 @@ class _AddWorkDayPageState extends ConsumerState<AddWorkDayPage> {
       children: [
         _SectionCard(
           title: 'Tag',
-          icon:
-              Icons.calendar_today_outlined,
+          icon: Icons.calendar_today_outlined,
           child: Column(
             children: [
               ListTile(
-                contentPadding:
-                    EdgeInsets.zero,
-                title:
-                    const Text('Datum'),
-                subtitle:
-                    Text(_formatDate(_date)),
-                trailing:
-                    const Icon(
+                contentPadding: EdgeInsets.zero,
+                title: const Text('Datum'),
+                subtitle: Text(
+                  _formatDate(_date),
+                ),
+                trailing: const Icon(
                   Icons.chevron_right,
                 ),
                 onTap: _selectDate,
@@ -272,8 +299,10 @@ class _AddWorkDayPageState extends ConsumerState<AddWorkDayPage> {
             ],
           ),
         ),
+
         if (isWorkDay) ...[
           const SizedBox(height: 16),
+
           _SectionCard(
             title: 'Einsatz',
             icon: Icons.badge_outlined,
@@ -318,123 +347,46 @@ class _AddWorkDayPageState extends ConsumerState<AddWorkDayPage> {
                           selection.first;
 
                       if (_assignmentType ==
-                          WorkAssignmentType
-                              .packageDriver) {
-                        _districtNumber =
-                            null;
+                              WorkAssignmentType
+                                  .ownDistrict &&
+                          _ownTourDrafts
+                              .isEmpty) {
+                        _ownTourDrafts.add(
+                          _OwnTourDraft(),
+                        );
                       }
                     });
                   },
                 ),
-                if (hasOwnDistrict) ...[
-                  const SizedBox(
-                    height: 20,
-                  ),
-                  DropdownButtonFormField<
-                      int>(
-                    initialValue:
-                        _districtNumber,
-                    decoration:
-                        const InputDecoration(
-                      labelText: 'Bezirk',
-                      border:
-                          OutlineInputBorder(),
-                    ),
-                    hint: const Text(
-                      'Bezirk auswählen',
-                    ),
-                    items: districts
-                        .map(
-                          (district) =>
-                              DropdownMenuItem<
-                                  int>(
-                            value:
-                                district.number,
-                            child: Text(
-                              'Bezirk ${district.number}',
-                            ),
-                          ),
-                        )
-                        .toList(),
-                    onChanged: (value) {
-                      setState(() {
-                        _districtNumber =
-                            value;
-                      });
-                    },
-                  ),
-                  const SizedBox(
-                    height: 16,
-                  ),
-                  DropdownButtonFormField<
-                      DistrictPart>(
-                    initialValue:
-                        _districtPart,
-                    decoration:
-                        const InputDecoration(
-                      labelText:
-                          'Bezirksteil',
-                      border:
-                          OutlineInputBorder(),
-                    ),
-                    items:
-                        DistrictPart.values
-                            .map(
-                              (part) =>
-                                  DropdownMenuItem(
-                                value: part,
-                                child: Text(
-                                  _districtPartLabel(
-                                    part,
-                                  ),
-                                ),
-                              ),
-                            )
-                            .toList(),
-                    onChanged: (value) {
-                      if (value == null) {
-                        return;
-                      }
 
-                      setState(() {
-                        _districtPart =
-                            value;
-                      });
-                    },
-                  ),
-                ] else ...[
-                  const SizedBox(
-                    height: 16,
-                  ),
-                  Text(
-                    'Du bist an diesem Tag zusätzliche Unterstützung '
-                    'und übernimmst Pakete von regulär besetzten Bezirken.',
-                    style: Theme.of(context)
-                        .textTheme
-                        .bodyMedium
-                        ?.copyWith(
-                          color:
-                              Theme.of(
-                                context,
-                              )
-                                  .colorScheme
-                                  .onSurfaceVariant,
-                        ),
-                  ),
-                ],
+                const SizedBox(height: 16),
+
+                Text(
+                  hasOwnDistrict
+                      ? 'Trage alle Bezirke ein, die du an diesem Tag selbst gefahren bist.'
+                      : 'Du bist an diesem Tag zusätzliche Unterstützung und übernimmst Pakete von regulär besetzten Bezirken.',
+                  style: Theme.of(context)
+                      .textTheme
+                      .bodyMedium
+                      ?.copyWith(
+                        color: Theme.of(context)
+                            .colorScheme
+                            .onSurfaceVariant,
+                      ),
+                ),
               ],
             ),
           ),
+
           const SizedBox(height: 16),
+
           _SectionCard(
             title: 'Zeiten',
-            icon:
-                Icons.schedule_outlined,
+            icon: Icons.schedule_outlined,
             child: Column(
               children: [
                 _TimeRow(
-                  label:
-                      'Arbeitsbeginn',
+                  label: 'Arbeitsbeginn',
                   value: _workStart,
                   onTap: () async {
                     final time =
@@ -444,17 +396,16 @@ class _AddWorkDayPageState extends ConsumerState<AddWorkDayPage> {
 
                     if (time != null) {
                       setState(() {
-                        _workStart =
-                            time;
+                        _workStart = time;
                       });
                     }
                   },
                 ),
                 const Divider(),
+
                 _TimeRow(
                   label: 'Abfahrt',
-                  value:
-                      _departureTime,
+                  value: _departureTime,
                   onTap: () async {
                     final time =
                         await _pickTime(
@@ -470,9 +421,9 @@ class _AddWorkDayPageState extends ConsumerState<AddWorkDayPage> {
                   },
                 ),
                 const Divider(),
+
                 _TimeRow(
-                  label:
-                      'Zustellende',
+                  label: 'Zustellende',
                   value: _deliveryEnd,
                   onTap: () async {
                     final time =
@@ -489,9 +440,9 @@ class _AddWorkDayPageState extends ConsumerState<AddWorkDayPage> {
                   },
                 ),
                 const Divider(),
+
                 _TimeRow(
-                  label:
-                      'Arbeitsende',
+                  label: 'Arbeitsende',
                   value: _workEnd,
                   onTap: () async {
                     final time =
@@ -506,11 +457,10 @@ class _AddWorkDayPageState extends ConsumerState<AddWorkDayPage> {
                     }
                   },
                 ),
-                const SizedBox(
-                  height: 12,
-                ),
-                DropdownButtonFormField<
-                    int>(
+
+                const SizedBox(height: 12),
+
+                DropdownButtonFormField<int>(
                   initialValue:
                       _breakMinutes,
                   decoration:
@@ -565,65 +515,27 @@ class _AddWorkDayPageState extends ConsumerState<AddWorkDayPage> {
               ],
             ),
           ),
+
           if (hasOwnDistrict) ...[
-            const SizedBox(
-              height: 16,
-            ),
-            _SectionCard(
-              title: 'Eigene Tour',
-              icon: Icons
-                  .inventory_2_outlined,
-              child: Column(
-                children: [
-                  TextField(
-                    controller:
-                        _packageCountController,
-                    keyboardType:
-                        TextInputType
-                            .number,
-                    decoration:
-                        const InputDecoration(
-                      labelText:
-                          'Pakete',
-                      hintText:
-                          'z. B. 85',
-                      border:
-                          OutlineInputBorder(),
-                    ),
-                  ),
-                  const SizedBox(
-                    height: 16,
-                  ),
-                  TextField(
-                    controller:
-                        _cancelledPackageCountController,
-                    keyboardType:
-                        TextInputType
-                            .number,
-                    decoration:
-                        const InputDecoration(
-                      labelText:
-                          'Abgebrochene Pakete',
-                      hintText:
-                          'z. B. 2',
-                      border:
-                          OutlineInputBorder(),
-                    ),
-                  ),
-                ],
-              ),
+            const SizedBox(height: 16),
+            _buildOwnTourSection(
+              context,
+              districts,
             ),
           ],
+
           const SizedBox(height: 16),
+
           _buildSupportSection(
             context,
             districts,
           ),
+
           const SizedBox(height: 16),
+
           _SectionCard(
             title: 'Werbung',
-            icon:
-                Icons.campaign_outlined,
+            icon: Icons.campaign_outlined,
             child: Column(
               children: [
                 SwitchListTile(
@@ -632,8 +544,7 @@ class _AddWorkDayPageState extends ConsumerState<AddWorkDayPage> {
                   title: const Text(
                     'Werbung mitgenommen',
                   ),
-                  value:
-                      _hasAdvertising,
+                  value: _hasAdvertising,
                   onChanged: (value) {
                     setState(() {
                       _hasAdvertising =
@@ -646,6 +557,7 @@ class _AddWorkDayPageState extends ConsumerState<AddWorkDayPage> {
                     });
                   },
                 ),
+
                 if (_hasAdvertising) ...[
                   const SizedBox(
                     height: 8,
@@ -667,11 +579,12 @@ class _AddWorkDayPageState extends ConsumerState<AddWorkDayPage> {
               ],
             ),
           ),
+
           const SizedBox(height: 16),
+
           _SectionCard(
             title: 'Bemerkungen',
-            icon:
-                Icons.notes_outlined,
+            icon: Icons.notes_outlined,
             child: TextField(
               controller:
                   _notesController,
@@ -687,7 +600,9 @@ class _AddWorkDayPageState extends ConsumerState<AddWorkDayPage> {
             ),
           ),
         ],
+
         const SizedBox(height: 24),
+
         FilledButton.icon(
           onPressed: _isSaving
               ? null
@@ -719,6 +634,93 @@ class _AddWorkDayPageState extends ConsumerState<AddWorkDayPage> {
     );
   }
 
+  Widget _buildOwnTourSection(
+    BuildContext context,
+    List<District> districts,
+  ) {
+    return _SectionCard(
+      title: 'Eigene Touren',
+      icon: Icons.inventory_2_outlined,
+      child: Column(
+        crossAxisAlignment:
+            CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Hier kannst du alle Bezirke eintragen, '
+            'die du an diesem Arbeitstag selbst gefahren bist.',
+            style: Theme.of(context)
+                .textTheme
+                .bodyMedium
+                ?.copyWith(
+                  color: Theme.of(context)
+                      .colorScheme
+                      .onSurfaceVariant,
+                ),
+          ),
+
+          if (_ownTourDrafts.isNotEmpty) ...[
+            const SizedBox(height: 16),
+
+            for (var index = 0;
+                index <
+                    _ownTourDrafts.length;
+                index++) ...[
+              _OwnTourEditor(
+                key: ValueKey(
+                  _ownTourDrafts[index]
+                      .key,
+                ),
+                number: index + 1,
+                draft:
+                    _ownTourDrafts[index],
+                districts: districts,
+                canDelete:
+                    _ownTourDrafts.length >
+                        1,
+                onDelete: () {
+                  setState(() {
+                    final draft =
+                        _ownTourDrafts
+                            .removeAt(
+                      index,
+                    );
+
+                    draft.dispose();
+                  });
+                },
+              ),
+
+              if (index !=
+                  _ownTourDrafts.length -
+                      1)
+                const SizedBox(
+                  height: 16,
+                ),
+            ],
+          ],
+
+          const SizedBox(height: 16),
+
+          OutlinedButton.icon(
+            onPressed: () {
+              setState(() {
+                _ownTourDrafts.add(
+                  _OwnTourDraft(),
+                );
+              });
+            },
+            icon: const Icon(
+              Icons.add,
+            ),
+            label: const Text(
+              'Weitere eigene Tour hinzufügen',
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildSupportSection(
     BuildContext context,
     List<District> districts,
@@ -734,10 +736,8 @@ class _AddWorkDayPageState extends ConsumerState<AddWorkDayPage> {
             _assignmentType ==
                     WorkAssignmentType
                         .packageDriver
-                ? 'Trage hier die Bezirke ein, von denen du Pakete '
-                    'übernommen hast.'
-                : 'Wenn du nach deiner eigenen Tour noch Kollegen '
-                    'unterstützt hast, kannst du diese hier eintragen.',
+                ? 'Trage hier die Bezirke ein, von denen du Pakete übernommen hast.'
+                : 'Wenn du nach deinen eigenen Touren noch Kollegen unterstützt hast, kannst du diese hier eintragen.',
             style: Theme.of(context)
                 .textTheme
                 .bodyMedium
@@ -747,11 +747,11 @@ class _AddWorkDayPageState extends ConsumerState<AddWorkDayPage> {
                       .onSurfaceVariant,
                 ),
           ),
+
           if (_supportDrafts
               .isNotEmpty) ...[
-            const SizedBox(
-              height: 16,
-            ),
+            const SizedBox(height: 16),
+
             for (var index = 0;
                 index <
                     _supportDrafts.length;
@@ -776,16 +776,18 @@ class _AddWorkDayPageState extends ConsumerState<AddWorkDayPage> {
                   });
                 },
               ),
+
               if (index !=
-                  _supportDrafts
-                          .length -
+                  _supportDrafts.length -
                       1)
                 const SizedBox(
                   height: 16,
                 ),
             ],
           ],
+
           const SizedBox(height: 16),
+
           OutlinedButton.icon(
             onPressed: () {
               setState(() {
@@ -794,8 +796,9 @@ class _AddWorkDayPageState extends ConsumerState<AddWorkDayPage> {
                 );
               });
             },
-            icon:
-                const Icon(Icons.add),
+            icon: const Icon(
+              Icons.add,
+            ),
             label: const Text(
               'Unterstützung hinzufügen',
             ),
@@ -841,43 +844,93 @@ class _AddWorkDayPageState extends ConsumerState<AddWorkDayPage> {
   Future<void> _save(
     List<District> districts,
   ) async {
-    if (_type ==
-            WorkDayType.work &&
+    final isWorkDay =
+        _type == WorkDayType.work;
+
+    final hasOwnDistrict =
         _assignmentType ==
-            WorkAssignmentType
-                .ownDistrict &&
-        _districtNumber == null) {
+            WorkAssignmentType.ownDistrict;
+
+    if (isWorkDay &&
+        hasOwnDistrict &&
+        _ownTourDrafts.isEmpty) {
       _showMessage(
-        'Bitte wähle deinen Bezirk aus.',
+        'Bitte füge mindestens eine eigene Tour hinzu.',
       );
       return;
     }
 
-    if (_type ==
-        WorkDayType.work) {
-      for (final draft
-          in _supportDrafts) {
+    if (isWorkDay &&
+        hasOwnDistrict) {
+      for (var index = 0;
+          index <
+              _ownTourDrafts.length;
+          index++) {
+        final draft =
+            _ownTourDrafts[index];
+
         if (draft.districtNumber ==
             null) {
           _showMessage(
-            'Bitte wähle bei jeder Unterstützung einen Bezirk aus.',
+            'Bitte wähle bei eigener Tour ${index + 1} einen Bezirk aus.',
+          );
+          return;
+        }
+
+        final packageCount =
+            _parseCount(
+          draft.packageController,
+        );
+
+        final cancelledPackageCount =
+            _parseCount(
+          draft
+              .cancelledPackageController,
+        );
+
+        if (packageCount < 0 ||
+            cancelledPackageCount <
+                0) {
+          _showMessage(
+            'Paketmengen dürfen nicht negativ sein.',
+          );
+          return;
+        }
+
+        if (cancelledPackageCount >
+            packageCount) {
+          _showMessage(
+            'Bei eigener Tour ${index + 1} können abgebrochene Pakete nicht höher als die gesamte Paketmenge sein.',
+          );
+          return;
+        }
+      }
+    }
+
+    if (isWorkDay) {
+      for (var index = 0;
+          index <
+              _supportDrafts.length;
+          index++) {
+        final draft =
+            _supportDrafts[index];
+
+        if (draft.districtNumber ==
+            null) {
+          _showMessage(
+            'Bitte wähle bei Unterstützung ${index + 1} einen Bezirk aus.',
           );
           return;
         }
 
         final packages =
-            int.tryParse(
-                  draft
-                      .packageController
-                      .text
-                      .trim(),
-                ) ??
-                0;
+            _parseCount(
+          draft.packageController,
+        );
 
         if (packages <= 0) {
           _showMessage(
-            'Bitte trage bei jeder Unterstützung die '
-            'übernommenen Pakete ein.',
+            'Bitte trage bei Unterstützung ${index + 1} die übernommenen Pakete ein.',
           );
           return;
         }
@@ -894,122 +947,40 @@ class _AddWorkDayPageState extends ConsumerState<AddWorkDayPage> {
       }
     }
 
-    final packageCount =
-        int.tryParse(
-              _packageCountController
-                  .text
-                  .trim(),
-            ) ??
-            0;
-
-    final cancelledPackageCount =
-        int.tryParse(
-              _cancelledPackageCountController
-                  .text
-                  .trim(),
-            ) ??
-            0;
-
-    if (cancelledPackageCount >
-        packageCount) {
-      _showMessage(
-        'Abgebrochene Pakete können nicht höher als die '
-        'gesamte Paketmenge sein.',
-      );
-      return;
-    }
-
     final id =
         widget.existingWorkDay?.id ??
             const Uuid().v4();
 
-    final workDay = WorkDay(
-      id: id,
-      date: _date,
-      type: _type,
-      assignmentType:
-          _assignmentType,
-      districtId:
-          _type ==
-                      WorkDayType.work &&
-                  _assignmentType ==
-                      WorkAssignmentType
-                          .ownDistrict
-              ? _districtNumber
-                  ?.toString()
-              : null,
-      districtPart:
-          _districtPart,
-      workStart:
-          _type ==
-                  WorkDayType.work
-              ? _timeToMinutes(
-                  _workStart,
+    final ownTourEntries =
+        isWorkDay &&
+                hasOwnDistrict
+            ? _ownTourDrafts
+                .map(
+                  (draft) =>
+                      OwnTourEntry(
+                    workDayId: id,
+                    district: draft
+                        .districtNumber
+                        .toString(),
+                    districtPart: draft
+                        .districtPart,
+                    packageCount:
+                        _parseCount(
+                      draft
+                          .packageController,
+                    ),
+                    cancelledPackageCount:
+                        _parseCount(
+                      draft
+                          .cancelledPackageController,
+                    ),
+                  ),
                 )
-              : null,
-      departureTime:
-          _type ==
-                  WorkDayType.work
-              ? _timeToMinutes(
-                  _departureTime,
-                )
-              : null,
-      deliveryEnd:
-          _type ==
-                  WorkDayType.work
-              ? _timeToMinutes(
-                  _deliveryEnd,
-                )
-              : null,
-      workEnd:
-          _type ==
-                  WorkDayType.work
-              ? _timeToMinutes(
-                  _workEnd,
-                )
-              : null,
-      breakMinutes:
-          _type ==
-                  WorkDayType.work
-              ? _breakMinutes
-              : 0,
-      packageCount:
-          _type ==
-                      WorkDayType.work &&
-                  _assignmentType ==
-                      WorkAssignmentType
-                          .ownDistrict
-              ? packageCount
-              : 0,
-      cancelledPackageCount:
-          _type ==
-                      WorkDayType.work &&
-                  _assignmentType ==
-                      WorkAssignmentType
-                          .ownDistrict
-              ? cancelledPackageCount
-              : 0,
-      hasAdvertising:
-          _type ==
-                  WorkDayType.work &&
-              _hasAdvertising,
-      advertising:
-          _type ==
-                      WorkDayType.work &&
-                  _hasAdvertising
-              ? _nullIfEmpty(
-                  _advertisingController
-                      .text,
-                )
-              : null,
-      notes: _nullIfEmpty(
-        _notesController.text,
-      ),
-    );
+                .toList()
+            : <OwnTourEntry>[];
 
     final supportEntries =
-        _type ==
-                WorkDayType.work
+        isWorkDay
             ? _supportDrafts
                 .map(
                   (draft) =>
@@ -1019,13 +990,10 @@ class _AddWorkDayPageState extends ConsumerState<AddWorkDayPage> {
                         .districtNumber
                         .toString(),
                     packagesTaken:
-                        int.tryParse(
-                              draft
-                                  .packageController
-                                  .text
-                                  .trim(),
-                            ) ??
-                            0,
+                        _parseCount(
+                      draft
+                          .packageController,
+                    ),
                     note:
                         _nullIfEmpty(
                       draft
@@ -1036,6 +1004,108 @@ class _AddWorkDayPageState extends ConsumerState<AddWorkDayPage> {
                 )
                 .toList()
             : <SupportEntry>[];
+
+    final firstOwnTour =
+        ownTourEntries.isEmpty
+            ? null
+            : ownTourEntries.first;
+
+    final totalOwnPackageCount =
+        ownTourEntries.fold<int>(
+      0,
+      (sum, entry) =>
+          sum + entry.packageCount,
+    );
+
+    final totalOwnCancelledPackageCount =
+        ownTourEntries.fold<int>(
+      0,
+      (sum, entry) =>
+          sum +
+          entry.cancelledPackageCount,
+    );
+
+    final workDay = WorkDay(
+      id: id,
+      date: _date,
+      type: _type,
+      assignmentType:
+          _assignmentType,
+
+      // Diese Felder bleiben vorerst aus Kompatibilitätsgründen
+      // erhalten. Der erste Bezirk wird hier gespeichert.
+      districtId:
+          firstOwnTour?.district,
+
+      districtPart:
+          firstOwnTour?.districtPart ??
+              DistrictPart.full,
+
+      workStart:
+          isWorkDay
+              ? _timeToMinutes(
+                  _workStart,
+                )
+              : null,
+
+      departureTime:
+          isWorkDay
+              ? _timeToMinutes(
+                  _departureTime,
+                )
+              : null,
+
+      deliveryEnd:
+          isWorkDay
+              ? _timeToMinutes(
+                  _deliveryEnd,
+                )
+              : null,
+
+      workEnd:
+          isWorkDay
+              ? _timeToMinutes(
+                  _workEnd,
+                )
+              : null,
+
+      breakMinutes:
+          isWorkDay
+              ? _breakMinutes
+              : 0,
+
+      // Hier speichern wir jetzt die Gesamtsumme aller eigenen Touren.
+      // Dadurch funktionieren Übersicht und bestehende Statistiken
+      // weiterhin korrekt, bis wir sie komplett auf OwnTourEntry umstellen.
+      packageCount:
+          isWorkDay &&
+                  hasOwnDistrict
+              ? totalOwnPackageCount
+              : 0,
+
+      cancelledPackageCount:
+          isWorkDay &&
+                  hasOwnDistrict
+              ? totalOwnCancelledPackageCount
+              : 0,
+
+      hasAdvertising:
+          isWorkDay &&
+              _hasAdvertising,
+
+      advertising:
+          isWorkDay &&
+                  _hasAdvertising
+              ? _nullIfEmpty(
+                  _advertisingController
+                      .text,
+                )
+              : null,
+
+      notes: _nullIfEmpty(
+        _notesController.text,
+      ),
+    );
 
     setState(() {
       _isSaving = true;
@@ -1050,12 +1120,16 @@ class _AddWorkDayPageState extends ConsumerState<AddWorkDayPage> {
           null) {
         await notifier.saveWorkDay(
           workDay: workDay,
+          ownTourEntries:
+              ownTourEntries,
           supportEntries:
               supportEntries,
         );
       } else {
         await notifier.updateWorkDay(
           workDay: workDay,
+          ownTourEntries:
+              ownTourEntries,
           supportEntries:
               supportEntries,
         );
@@ -1065,8 +1139,7 @@ class _AddWorkDayPageState extends ConsumerState<AddWorkDayPage> {
         return;
       }
 
-      Navigator.of(context)
-          .pop(true);
+      Navigator.of(context).pop(true);
     } catch (error) {
       if (!mounted) {
         return;
@@ -1093,6 +1166,15 @@ class _AddWorkDayPageState extends ConsumerState<AddWorkDayPage> {
         content: Text(message),
       ),
     );
+  }
+
+  static int _parseCount(
+    TextEditingController controller,
+  ) {
+    return int.tryParse(
+          controller.text.trim(),
+        ) ??
+        0;
   }
 
   static int? _timeToMinutes(
@@ -1152,33 +1234,23 @@ class _AddWorkDayPageState extends ConsumerState<AddWorkDayPage> {
     switch (type) {
       case WorkDayType.work:
         return 'Arbeit';
+
       case WorkDayType.free:
         return 'Frei';
+
       case WorkDayType.vacation:
         return 'Urlaub';
+
       case WorkDayType.holiday:
         return 'Feiertag';
+
       case WorkDayType.sick:
         return 'Krank';
     }
   }
-
-  static String _districtPartLabel(
-    DistrictPart part,
-  ) {
-    switch (part) {
-      case DistrictPart.full:
-        return 'Ganzer Bezirk';
-      case DistrictPart.partA:
-        return 'A-Teil';
-      case DistrictPart.partB:
-        return 'B-Teil';
-    }
-  }
 }
 
-class _SectionCard
-    extends StatelessWidget {
+class _SectionCard extends StatelessWidget {
   const _SectionCard({
     required this.title,
     required this.icon,
@@ -1190,9 +1262,7 @@ class _SectionCard
   final Widget child;
 
   @override
-  Widget build(
-    BuildContext context,
-  ) {
+  Widget build(BuildContext context) {
     return Card(
       margin: EdgeInsets.zero,
       child: Padding(
@@ -1214,17 +1284,19 @@ class _SectionCard
                 const SizedBox(
                   width: 10,
                 ),
-                Text(
-                  title,
-                  style:
-                      Theme.of(context)
-                          .textTheme
-                          .titleLarge
-                          ?.copyWith(
-                            fontWeight:
-                                FontWeight
-                                    .bold,
-                          ),
+                Expanded(
+                  child: Text(
+                    title,
+                    style:
+                        Theme.of(context)
+                            .textTheme
+                            .titleLarge
+                            ?.copyWith(
+                              fontWeight:
+                                  FontWeight
+                                      .bold,
+                            ),
+                  ),
                 ),
               ],
             ),
@@ -1239,8 +1311,7 @@ class _SectionCard
   }
 }
 
-class _TimeRow
-    extends StatelessWidget {
+class _TimeRow extends StatelessWidget {
   const _TimeRow({
     required this.label,
     required this.value,
@@ -1252,9 +1323,7 @@ class _TimeRow
   final VoidCallback onTap;
 
   @override
-  Widget build(
-    BuildContext context,
-  ) {
+  Widget build(BuildContext context) {
     return ListTile(
       contentPadding:
           EdgeInsets.zero,
@@ -1289,6 +1358,207 @@ class _TimeRow
   }
 }
 
+class _OwnTourEditor
+    extends StatefulWidget {
+  const _OwnTourEditor({
+    super.key,
+    required this.number,
+    required this.draft,
+    required this.districts,
+    required this.canDelete,
+    required this.onDelete,
+  });
+
+  final int number;
+  final _OwnTourDraft draft;
+  final List<District> districts;
+  final bool canDelete;
+  final VoidCallback onDelete;
+
+  @override
+  State<_OwnTourEditor>
+      createState() =>
+          _OwnTourEditorState();
+}
+
+class _OwnTourEditorState
+    extends State<_OwnTourEditor> {
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding:
+          const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        border: Border.all(
+          color: Theme.of(context)
+              .colorScheme
+              .outlineVariant,
+        ),
+        borderRadius:
+            BorderRadius.circular(14),
+      ),
+      child: Column(
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  'Eigene Tour ${widget.number}',
+                  style:
+                      Theme.of(context)
+                          .textTheme
+                          .titleMedium
+                          ?.copyWith(
+                            fontWeight:
+                                FontWeight
+                                    .w600,
+                          ),
+                ),
+              ),
+              if (widget.canDelete)
+                IconButton(
+                  tooltip:
+                      'Tour entfernen',
+                  onPressed:
+                      widget.onDelete,
+                  icon: const Icon(
+                    Icons
+                        .delete_outline,
+                  ),
+                ),
+            ],
+          ),
+
+          const SizedBox(height: 8),
+
+          DropdownButtonFormField<int>(
+            initialValue:
+                widget.draft
+                    .districtNumber,
+            decoration:
+                const InputDecoration(
+              labelText: 'Bezirk',
+              border:
+                  OutlineInputBorder(),
+            ),
+            hint: const Text(
+              'Bezirk auswählen',
+            ),
+            items: widget.districts
+                .map(
+                  (district) =>
+                      DropdownMenuItem<
+                          int>(
+                    value:
+                        district.number,
+                    child: Text(
+                      'Bezirk ${district.number}',
+                    ),
+                  ),
+                )
+                .toList(),
+            onChanged: (value) {
+              setState(() {
+                widget.draft
+                        .districtNumber =
+                    value;
+              });
+            },
+          ),
+
+          const SizedBox(height: 12),
+
+          DropdownButtonFormField<
+              DistrictPart>(
+            initialValue:
+                widget.draft
+                    .districtPart,
+            decoration:
+                const InputDecoration(
+              labelText: 'Bezirksteil',
+              border:
+                  OutlineInputBorder(),
+            ),
+            items: DistrictPart.values
+                .map(
+                  (part) =>
+                      DropdownMenuItem<
+                          DistrictPart>(
+                    value: part,
+                    child: Text(
+                      _districtPartLabel(
+                        part,
+                      ),
+                    ),
+                  ),
+                )
+                .toList(),
+            onChanged: (value) {
+              if (value == null) {
+                return;
+              }
+
+              setState(() {
+                widget.draft
+                        .districtPart =
+                    value;
+              });
+            },
+          ),
+
+          const SizedBox(height: 12),
+
+          TextField(
+            controller: widget.draft
+                .packageController,
+            keyboardType:
+                TextInputType.number,
+            decoration:
+                const InputDecoration(
+              labelText: 'Pakete',
+              hintText: 'z. B. 85',
+              border:
+                  OutlineInputBorder(),
+            ),
+          ),
+
+          const SizedBox(height: 12),
+
+          TextField(
+            controller: widget.draft
+                .cancelledPackageController,
+            keyboardType:
+                TextInputType.number,
+            decoration:
+                const InputDecoration(
+              labelText:
+                  'Abgebrochene Pakete',
+              hintText: 'z. B. 2',
+              border:
+                  OutlineInputBorder(),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  static String _districtPartLabel(
+    DistrictPart part,
+  ) {
+    switch (part) {
+      case DistrictPart.full:
+        return 'Ganzer Bezirk';
+
+      case DistrictPart.partA:
+        return 'A-Teil';
+
+      case DistrictPart.partB:
+        return 'B-Teil';
+    }
+  }
+}
+
 class _SupportEditor
     extends StatefulWidget {
   const _SupportEditor({
@@ -1311,9 +1581,7 @@ class _SupportEditor
 class _SupportEditorState
     extends State<_SupportEditor> {
   @override
-  Widget build(
-    BuildContext context,
-  ) {
+  Widget build(BuildContext context) {
     return Container(
       padding:
           const EdgeInsets.all(14),
@@ -1355,11 +1623,10 @@ class _SupportEditorState
               ),
             ],
           ),
-          const SizedBox(
-            height: 8,
-          ),
-          DropdownButtonFormField<
-              int>(
+
+          const SizedBox(height: 8),
+
+          DropdownButtonFormField<int>(
             initialValue:
                 widget.draft
                     .districtNumber,
@@ -1393,9 +1660,9 @@ class _SupportEditorState
               });
             },
           ),
-          const SizedBox(
-            height: 12,
-          ),
+
+          const SizedBox(height: 12),
+
           TextField(
             controller: widget.draft
                 .packageController,
@@ -1405,15 +1672,14 @@ class _SupportEditorState
                 const InputDecoration(
               labelText:
                   'Übernommene Pakete',
-              hintText:
-                  'z. B. 20',
+              hintText: 'z. B. 20',
               border:
                   OutlineInputBorder(),
             ),
           ),
-          const SizedBox(
-            height: 12,
-          ),
+
+          const SizedBox(height: 12),
+
           TextField(
             controller:
                 widget.draft
@@ -1430,6 +1696,74 @@ class _SupportEditorState
         ],
       ),
     );
+  }
+}
+
+class _OwnTourDraft {
+  _OwnTourDraft()
+      : key = UniqueKey(),
+        packageController =
+            TextEditingController(),
+        cancelledPackageController =
+            TextEditingController();
+
+  _OwnTourDraft.fromEntry(
+    OwnTourEntry entry,
+  )   : key = UniqueKey(),
+        districtNumber =
+            int.tryParse(
+          entry.district,
+        ),
+        districtPart =
+            entry.districtPart,
+        packageController =
+            TextEditingController(
+          text:
+              '${entry.packageCount}',
+        ),
+        cancelledPackageController =
+            TextEditingController(
+          text:
+              '${entry.cancelledPackageCount}',
+        );
+
+  _OwnTourDraft.fromLegacyWorkDay(
+    WorkDay workDay,
+  )   : key = UniqueKey(),
+        districtNumber =
+            int.tryParse(
+          workDay.districtId ?? '',
+        ),
+        districtPart =
+            workDay.districtPart,
+        packageController =
+            TextEditingController(
+          text:
+              '${workDay.packageCount}',
+        ),
+        cancelledPackageController =
+            TextEditingController(
+          text:
+              '${workDay.cancelledPackageCount}',
+        );
+
+  final Key key;
+
+  int? districtNumber;
+
+  DistrictPart districtPart =
+      DistrictPart.full;
+
+  final TextEditingController
+      packageController;
+
+  final TextEditingController
+      cancelledPackageController;
+
+  void dispose() {
+    packageController.dispose();
+    cancelledPackageController
+        .dispose();
   }
 }
 

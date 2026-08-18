@@ -184,6 +184,7 @@ class _OverviewContent extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final now = DateTime.now();
+
     final today = DateTime(
       now.year,
       now.month,
@@ -234,7 +235,12 @@ class _OverviewContent extends ConsumerWidget {
     );
 
     return ListView(
-      padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
+      padding: const EdgeInsets.fromLTRB(
+        20,
+        16,
+        20,
+        32,
+      ),
       children: [
         Text(
           'Übersicht',
@@ -257,7 +263,9 @@ class _OverviewContent extends ConsumerWidget {
             Expanded(
               child: _SummaryCard(
                 title: 'Diese Woche',
-                value: _formatDuration(weeklyWorkMinutes),
+                value: _formatDuration(
+                  weeklyWorkMinutes,
+                ),
                 subtitle: 'Arbeitszeit',
                 icon: Icons.access_time,
               ),
@@ -277,8 +285,9 @@ class _OverviewContent extends ConsumerWidget {
         Row(
           children: [
             Expanded(
-              child: _TodaySupportSummaryCard(
-                workDay: todayWorkDay,
+              child: _WeeklySupportSummaryCard(
+                startDate: weekStart,
+                endDate: weekEnd,
               ),
             ),
             const SizedBox(width: 12),
@@ -301,7 +310,10 @@ class _OverviewContent extends ConsumerWidget {
     DateTime date,
   ) {
     for (final workDay in workDays) {
-      if (_isSameDate(workDay.date, date)) {
+      if (_isSameDate(
+        workDay.date,
+        date,
+      )) {
         return workDay;
       }
     }
@@ -318,7 +330,9 @@ class _OverviewContent extends ConsumerWidget {
         first.day == second.day;
   }
 
-  static DateTime _normalizeDate(DateTime date) {
+  static DateTime _normalizeDate(
+    DateTime date,
+  ) {
     return DateTime(
       date.year,
       date.month,
@@ -335,7 +349,10 @@ class _TodayCard extends ConsumerWidget {
   final WorkDay? workDay;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(
+    BuildContext context,
+    WidgetRef ref,
+  ) {
     if (workDay == null) {
       return Card(
         child: Padding(
@@ -343,7 +360,7 @@ class _TodayCard extends ConsumerWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              _TodayHeader(
+              const _TodayHeader(
                 icon: Icons.today_outlined,
                 title: 'Heute',
               ),
@@ -357,14 +374,18 @@ class _TodayCard extends ConsumerWidget {
                 onPressed: () async {
                   await Navigator.of(context).push<bool>(
                     MaterialPageRoute<bool>(
-                      builder: (context) => AddWorkDayPage(
-                        initialDate: DateTime.now(),
-                      ),
+                      builder: (context) {
+                        return AddWorkDayPage(
+                          initialDate: DateTime.now(),
+                        );
+                      },
                     ),
                   );
                 },
                 icon: const Icon(Icons.add),
-                label: const Text('Arbeitstag eintragen'),
+                label: const Text(
+                  'Arbeitstag eintragen',
+                ),
               ),
             ],
           ),
@@ -380,13 +401,20 @@ class _TodayCard extends ConsumerWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               _TodayHeader(
-                icon: _workDayTypeIcon(workDay!.type),
+                icon: _workDayTypeIcon(
+                  workDay!.type,
+                ),
                 title: 'Heute',
               ),
               const SizedBox(height: 20),
               Text(
-                _workDayTypeLabel(workDay!.type),
-                style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                _workDayTypeLabel(
+                  workDay!.type,
+                ),
+                style: Theme.of(context)
+                    .textTheme
+                    .headlineSmall
+                    ?.copyWith(
                       fontWeight: FontWeight.bold,
                     ),
               ),
@@ -403,10 +431,12 @@ class _TodayCard extends ConsumerWidget {
             workDay!.id,
           ),
       builder: (context, snapshot) {
-        final supportPackages = snapshot.data ?? 0;
+        final supportPackages =
+            snapshot.data ?? 0;
 
         final totalDelivered =
-            workDay!.deliveredPackageCount + supportPackages;
+            workDay!.deliveredPackageCount +
+                supportPackages;
 
         return Card(
           child: Padding(
@@ -420,15 +450,25 @@ class _TodayCard extends ConsumerWidget {
                 ),
                 const SizedBox(height: 20),
                 Text(
-                  _assignmentTitle(workDay!),
-                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                  _assignmentTitle(
+                    workDay!,
+                  ),
+                  style: Theme.of(context)
+                      .textTheme
+                      .titleLarge
+                      ?.copyWith(
                         fontWeight: FontWeight.bold,
                       ),
                 ),
                 const SizedBox(height: 6),
                 Text(
-                  _assignmentSubtitle(workDay!),
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  _assignmentSubtitle(
+                    workDay!,
+                  ),
+                  style: Theme.of(context)
+                      .textTheme
+                      .bodyMedium
+                      ?.copyWith(
                         color: Theme.of(context)
                             .colorScheme
                             .onSurfaceVariant,
@@ -437,11 +477,14 @@ class _TodayCard extends ConsumerWidget {
                 const SizedBox(height: 20),
                 _TodayInfoRow(
                   label: 'Arbeitszeit',
-                  value: workDay!.workDurationMinutes == null
-                      ? '–'
-                      : _formatDuration(
-                          workDay!.workDurationMinutes!,
-                        ),
+                  value:
+                      workDay!.workDurationMinutes ==
+                              null
+                          ? '–'
+                          : _formatDuration(
+                              workDay!
+                                  .workDurationMinutes!,
+                            ),
                 ),
                 const SizedBox(height: 10),
                 _TodayInfoRow(
@@ -456,18 +499,21 @@ class _TodayCard extends ConsumerWidget {
                   const SizedBox(height: 10),
                   _TodayInfoRow(
                     label: 'Eigene Pakete',
-                    value: '${workDay!.deliveredPackageCount}',
+                    value:
+                        '${workDay!.deliveredPackageCount}',
                   ),
                 ],
                 const SizedBox(height: 10),
                 _TodayInfoRow(
                   label: 'Unterstützung',
-                  value: '$supportPackages Pakete',
+                  value:
+                      '$supportPackages Pakete',
                 ),
                 const SizedBox(height: 10),
                 _TodayInfoRow(
                   label: 'Gesamt zugestellt',
-                  value: '$totalDelivered Pakete',
+                  value:
+                      '$totalDelivered Pakete',
                   emphasize: true,
                 ),
               ],
@@ -478,7 +524,9 @@ class _TodayCard extends ConsumerWidget {
     );
   }
 
-  static String _assignmentTitle(WorkDay workDay) {
+  static String _assignmentTitle(
+    WorkDay workDay,
+  ) {
     if (workDay.assignmentType ==
         WorkAssignmentType.packageDriver) {
       return 'Paketfahrer / Unterstützung';
@@ -491,7 +539,9 @@ class _TodayCard extends ConsumerWidget {
     return 'Bezirk ${workDay.districtId}';
   }
 
-  static String _assignmentSubtitle(WorkDay workDay) {
+  static String _assignmentSubtitle(
+    WorkDay workDay,
+  ) {
     if (workDay.assignmentType ==
         WorkAssignmentType.packageDriver) {
       return 'Zusätzliche Unterstützung';
@@ -502,78 +552,99 @@ class _TodayCard extends ConsumerWidget {
     );
   }
 
-  static String _districtPartLabel(DistrictPart part) {
+  static String _districtPartLabel(
+    DistrictPart part,
+  ) {
     switch (part) {
       case DistrictPart.full:
         return 'Ganzer Bezirk';
+
       case DistrictPart.partA:
         return 'A-Teil';
+
       case DistrictPart.partB:
         return 'B-Teil';
     }
   }
 
-  static IconData _workDayTypeIcon(WorkDayType type) {
+  static IconData _workDayTypeIcon(
+    WorkDayType type,
+  ) {
     switch (type) {
       case WorkDayType.work:
         return Icons.work_outline;
+
       case WorkDayType.free:
         return Icons.weekend_outlined;
+
       case WorkDayType.vacation:
         return Icons.beach_access_outlined;
+
       case WorkDayType.holiday:
         return Icons.celebration_outlined;
+
       case WorkDayType.sick:
         return Icons.sick_outlined;
     }
   }
 
-  static String _workDayTypeLabel(WorkDayType type) {
+  static String _workDayTypeLabel(
+    WorkDayType type,
+  ) {
     switch (type) {
       case WorkDayType.work:
         return 'Arbeit';
+
       case WorkDayType.free:
         return 'Frei';
+
       case WorkDayType.vacation:
         return 'Urlaub';
+
       case WorkDayType.holiday:
         return 'Feiertag';
+
       case WorkDayType.sick:
         return 'Krank';
     }
   }
 }
 
-class _TodaySupportSummaryCard extends ConsumerWidget {
-  const _TodaySupportSummaryCard({
-    required this.workDay,
+class _WeeklySupportSummaryCard extends ConsumerWidget {
+  const _WeeklySupportSummaryCard({
+    required this.startDate,
+    required this.endDate,
   });
 
-  final WorkDay? workDay;
+  final DateTime startDate;
+  final DateTime endDate;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    if (workDay == null ||
-        workDay!.type != WorkDayType.work) {
-      return const _SummaryCard(
-        title: 'Unterstützung',
-        value: '0',
-        subtitle: 'Pakete heute',
-        icon: Icons.group_outlined,
-      );
-    }
-
+  Widget build(
+    BuildContext context,
+    WidgetRef ref,
+  ) {
     return FutureBuilder<int>(
       future: ref
           .read(workDayProvider.notifier)
-          .getTotalSupportPackages(
-            workDay!.id,
+          .getTotalSupportPackagesForDateRange(
+            startDate,
+            endDate,
           ),
       builder: (context, snapshot) {
+        if (snapshot.hasError) {
+          return const _SummaryCard(
+            title: 'Unterstützung',
+            value: '–',
+            subtitle: 'Pakete diese Woche',
+            icon: Icons.group_outlined,
+          );
+        }
+
         return _SummaryCard(
           title: 'Unterstützung',
           value: '${snapshot.data ?? 0}',
-          subtitle: 'Pakete heute',
+          subtitle: 'Pakete diese Woche',
           icon: Icons.group_outlined,
         );
       },
@@ -591,17 +662,24 @@ class _TodayHeader extends StatelessWidget {
   final String title;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(
+    BuildContext context,
+  ) {
     return Row(
       children: [
         Icon(
           icon,
-          color: Theme.of(context).colorScheme.primary,
+          color: Theme.of(context)
+              .colorScheme
+              .primary,
         ),
         const SizedBox(width: 10),
         Text(
           title,
-          style: Theme.of(context).textTheme.titleLarge?.copyWith(
+          style: Theme.of(context)
+              .textTheme
+              .titleLarge
+              ?.copyWith(
                 fontWeight: FontWeight.bold,
               ),
         ),
@@ -622,19 +700,29 @@ class _TodayInfoRow extends StatelessWidget {
   final bool emphasize;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(
+    BuildContext context,
+  ) {
     final style = emphasize
-        ? Theme.of(context).textTheme.titleMedium?.copyWith(
+        ? Theme.of(context)
+            .textTheme
+            .titleMedium
+            ?.copyWith(
               fontWeight: FontWeight.bold,
             )
-        : Theme.of(context).textTheme.bodyLarge;
+        : Theme.of(context)
+            .textTheme
+            .bodyLarge;
 
     return Row(
       children: [
         Expanded(
           child: Text(
             label,
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+            style: Theme.of(context)
+                .textTheme
+                .bodyMedium
+                ?.copyWith(
                   color: Theme.of(context)
                       .colorScheme
                       .onSurfaceVariant,
@@ -664,37 +752,52 @@ class _SummaryCard extends StatelessWidget {
   final IconData icon;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(
+    BuildContext context,
+  ) {
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+          crossAxisAlignment:
+              CrossAxisAlignment.start,
           children: [
             Icon(
               icon,
-              color: Theme.of(context).colorScheme.primary,
+              color: Theme.of(context)
+                  .colorScheme
+                  .primary,
             ),
             const SizedBox(height: 16),
             Text(
               title,
               maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: Theme.of(context).textTheme.labelLarge,
+              overflow:
+                  TextOverflow.ellipsis,
+              style: Theme.of(context)
+                  .textTheme
+                  .labelLarge,
             ),
             const SizedBox(height: 4),
             Text(
               value,
-              style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                    fontWeight: FontWeight.bold,
+              style: Theme.of(context)
+                  .textTheme
+                  .titleLarge
+                  ?.copyWith(
+                    fontWeight:
+                        FontWeight.bold,
                   ),
             ),
             const SizedBox(height: 2),
             Text(
               subtitle,
               maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: Theme.of(context).textTheme.bodySmall,
+              overflow:
+                  TextOverflow.ellipsis,
+              style: Theme.of(context)
+                  .textTheme
+                  .bodySmall,
             ),
           ],
         ),
@@ -707,7 +810,9 @@ class _StatisticsPage extends StatelessWidget {
   const _StatisticsPage();
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(
+    BuildContext context,
+  ) {
     return Scaffold(
       appBar: AppBar(
         title: const Text(
@@ -731,7 +836,9 @@ class _MorePage extends StatelessWidget {
   const _MorePage();
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(
+    BuildContext context,
+  ) {
     return Scaffold(
       appBar: AppBar(
         title: const Text(
@@ -742,16 +849,29 @@ class _MorePage extends StatelessWidget {
         ),
       ),
       body: ListView(
-        padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
+        padding: const EdgeInsets.fromLTRB(
+          20,
+          16,
+          20,
+          32,
+        ),
         children: [
           Card(
             child: Column(
               children: [
                 ListTile(
-                  leading: const Icon(Icons.route_outlined),
-                  title: const Text('Bezirke'),
-                  subtitle: const Text('25 Bezirke verwalten'),
-                  trailing: const Icon(Icons.chevron_right),
+                  leading: const Icon(
+                    Icons.route_outlined,
+                  ),
+                  title: const Text(
+                    'Bezirke',
+                  ),
+                  subtitle: const Text(
+                    '25 Bezirke verwalten',
+                  ),
+                  trailing: const Icon(
+                    Icons.chevron_right,
+                  ),
                   onTap: () {
                     Navigator.of(context).push(
                       MaterialPageRoute<void>(
@@ -763,26 +883,33 @@ class _MorePage extends StatelessWidget {
                 ),
                 const Divider(height: 1),
                 ListTile(
-                  leading:
-                      const Icon(Icons.campaign_outlined),
-                  title: const Text('Werbung'),
+                  leading: const Icon(
+                    Icons.campaign_outlined,
+                  ),
+                  title:
+                      const Text('Werbung'),
                   subtitle: const Text(
                     'Gespeicherte Werbungen verwalten',
                   ),
-                  trailing:
-                      const Icon(Icons.chevron_right),
+                  trailing: const Icon(
+                    Icons.chevron_right,
+                  ),
                   onTap: () {},
                 ),
                 const Divider(height: 1),
                 ListTile(
-                  leading:
-                      const Icon(Icons.settings_outlined),
-                  title: const Text('Einstellungen'),
+                  leading: const Icon(
+                    Icons.settings_outlined,
+                  ),
+                  title: const Text(
+                    'Einstellungen',
+                  ),
                   subtitle: const Text(
                     'Arbeitszeiten und App-Einstellungen',
                   ),
-                  trailing:
-                      const Icon(Icons.chevron_right),
+                  trailing: const Icon(
+                    Icons.chevron_right,
+                  ),
                   onTap: () {},
                 ),
               ],
@@ -806,36 +933,45 @@ class _PlaceholderContent extends StatelessWidget {
   final String description;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(
+    BuildContext context,
+  ) {
     return Center(
       child: SingleChildScrollView(
-        padding: const EdgeInsets.all(32),
+        padding:
+            const EdgeInsets.all(32),
         child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
+          mainAxisAlignment:
+              MainAxisAlignment.center,
           children: [
             Icon(
               icon,
               size: 64,
-              color:
-                  Theme.of(context).colorScheme.primary,
+              color: Theme.of(context)
+                  .colorScheme
+                  .primary,
             ),
             const SizedBox(height: 20),
             Text(
               title,
-              textAlign: TextAlign.center,
+              textAlign:
+                  TextAlign.center,
               style: Theme.of(context)
                   .textTheme
                   .headlineSmall
                   ?.copyWith(
-                    fontWeight: FontWeight.bold,
+                    fontWeight:
+                        FontWeight.bold,
                   ),
             ),
             const SizedBox(height: 12),
             Text(
               description,
-              textAlign: TextAlign.center,
-              style:
-                  Theme.of(context).textTheme.bodyLarge,
+              textAlign:
+                  TextAlign.center,
+              style: Theme.of(context)
+                  .textTheme
+                  .bodyLarge,
             ),
           ],
         ),
@@ -844,9 +980,13 @@ class _PlaceholderContent extends StatelessWidget {
   }
 }
 
-String _formatDuration(int minutes) {
+String _formatDuration(
+  int minutes,
+) {
   final hours = minutes ~/ 60;
-  final remainingMinutes = minutes % 60;
+
+  final remainingMinutes =
+      minutes % 60;
 
   return '$hours h ${remainingMinutes.toString().padLeft(2, '0')} min';
 }
@@ -855,16 +995,21 @@ String _formatTimeRange(
   int? startMinutes,
   int? endMinutes,
 ) {
-  if (startMinutes == null || endMinutes == null) {
+  if (startMinutes == null ||
+      endMinutes == null) {
     return '–';
   }
 
   return '${_formatTime(startMinutes)} – ${_formatTime(endMinutes)}';
 }
 
-String _formatTime(int minutes) {
+String _formatTime(
+  int minutes,
+) {
   final hours = minutes ~/ 60;
-  final remainingMinutes = minutes % 60;
+
+  final remainingMinutes =
+      minutes % 60;
 
   return '${hours.toString().padLeft(2, '0')}:'
       '${remainingMinutes.toString().padLeft(2, '0')}';

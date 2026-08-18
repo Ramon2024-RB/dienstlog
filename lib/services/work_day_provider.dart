@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../models/own_tour_entry.dart';
 import '../models/support_entry.dart';
 import '../models/work_day.dart';
 import 'app_database.dart';
@@ -33,6 +34,32 @@ class WorkDayNotifier extends AsyncNotifier<List<WorkDay>> {
     return _database.getWorkDayByDate(date);
   }
 
+  Future<List<OwnTourEntry>> getOwnTourEntries(
+    String workDayId,
+  ) async {
+    return _database.getOwnTourEntriesForWorkDay(
+      workDayId,
+    );
+  }
+
+  Future<int> getTotalOwnTourPackages(
+    String workDayId,
+  ) async {
+    return _database.getTotalOwnTourPackagesForWorkDay(
+      workDayId,
+    );
+  }
+
+  Future<int> getTotalOwnTourPackagesForDateRange(
+    DateTime startDate,
+    DateTime endDate,
+  ) async {
+    return _database.getTotalOwnTourPackagesForDateRange(
+      startDate,
+      endDate,
+    );
+  }
+
   Future<List<SupportEntry>> getSupportEntries(
     String workDayId,
   ) async {
@@ -49,14 +76,30 @@ class WorkDayNotifier extends AsyncNotifier<List<WorkDay>> {
     );
   }
 
+  Future<int> getTotalSupportPackagesForDateRange(
+    DateTime startDate,
+    DateTime endDate,
+  ) async {
+    return _database.getTotalSupportPackagesForDateRange(
+      startDate,
+      endDate,
+    );
+  }
+
   Future<void> saveWorkDay({
     required WorkDay workDay,
+    List<OwnTourEntry> ownTourEntries = const [],
     List<SupportEntry> supportEntries = const [],
   }) async {
     final previousState = state;
 
     try {
       await _database.insertWorkDay(workDay);
+
+      await _database.replaceOwnTourEntriesForWorkDay(
+        workDay.id,
+        ownTourEntries,
+      );
 
       await _database.replaceSupportEntriesForWorkDay(
         workDay.id,
@@ -78,12 +121,20 @@ class WorkDayNotifier extends AsyncNotifier<List<WorkDay>> {
 
   Future<void> updateWorkDay({
     required WorkDay workDay,
+    List<OwnTourEntry>? ownTourEntries,
     List<SupportEntry>? supportEntries,
   }) async {
     final previousState = state;
 
     try {
       await _database.updateWorkDay(workDay);
+
+      if (ownTourEntries != null) {
+        await _database.replaceOwnTourEntriesForWorkDay(
+          workDay.id,
+          ownTourEntries,
+        );
+      }
 
       if (supportEntries != null) {
         await _database.replaceSupportEntriesForWorkDay(

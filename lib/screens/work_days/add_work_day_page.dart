@@ -12,9 +12,13 @@ class AddWorkDayPage extends ConsumerStatefulWidget {
   const AddWorkDayPage({
     super.key,
     this.initialDate,
+    this.existingWorkDay,
+    this.initialSupportEntries = const [],
   });
 
   final DateTime? initialDate;
+  final WorkDay? existingWorkDay;
+  final List<SupportEntry> initialSupportEntries;
 
   @override
   ConsumerState<AddWorkDayPage> createState() => _AddWorkDayPageState();
@@ -57,13 +61,56 @@ class _AddWorkDayPageState extends ConsumerState<AddWorkDayPage> {
   void initState() {
     super.initState();
 
-    final initialDate = widget.initialDate ?? DateTime.now();
+    final existingWorkDay = widget.existingWorkDay;
 
-    _date = DateTime(
-      initialDate.year,
-      initialDate.month,
-      initialDate.day,
-    );
+    if (existingWorkDay != null) {
+      _date = DateTime(
+        existingWorkDay.date.year,
+        existingWorkDay.date.month,
+        existingWorkDay.date.day,
+      );
+
+      _type = existingWorkDay.type;
+      _assignmentType = existingWorkDay.assignmentType;
+      _districtPart = existingWorkDay.districtPart;
+      _districtNumber = int.tryParse(existingWorkDay.districtId ?? '');
+
+      _workStart = _minutesToTime(existingWorkDay.workStart);
+      _departureTime = _minutesToTime(existingWorkDay.departureTime);
+      _deliveryEnd = _minutesToTime(existingWorkDay.deliveryEnd);
+      _workEnd = _minutesToTime(existingWorkDay.workEnd);
+
+      _breakMinutes = existingWorkDay.breakMinutes;
+
+      _packageCountController.text =
+          '${existingWorkDay.packageCount}';
+
+      _cancelledPackageCountController.text =
+          '${existingWorkDay.cancelledPackageCount}';
+
+      _hasAdvertising = existingWorkDay.hasAdvertising;
+
+      _advertisingController.text =
+          existingWorkDay.advertising ?? '';
+
+      _notesController.text =
+          existingWorkDay.notes ?? '';
+
+      for (final entry in widget.initialSupportEntries) {
+        _supportDrafts.add(
+          _SupportDraft.fromEntry(entry),
+        );
+      }
+    } else {
+      final initialDate =
+          widget.initialDate ?? DateTime.now();
+
+      _date = DateTime(
+        initialDate.year,
+        initialDate.month,
+        initialDate.day,
+      );
+    }
   }
 
   @override
@@ -82,13 +129,16 @@ class _AddWorkDayPageState extends ConsumerState<AddWorkDayPage> {
 
   @override
   Widget build(BuildContext context) {
-    final districtsAsync = ref.watch(districtProvider);
+    final districtsAsync =
+        ref.watch(districtProvider);
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text(
-          'Arbeitstag eintragen',
-          style: TextStyle(
+        title: Text(
+          widget.existingWorkDay == null
+              ? 'Arbeitstag eintragen'
+              : 'Arbeitstag bearbeiten',
+          style: const TextStyle(
             fontWeight: FontWeight.bold,
           ),
         ),
@@ -121,7 +171,9 @@ class _AddWorkDayPageState extends ConsumerState<AddWorkDayPage> {
                       ref.invalidate(districtProvider);
                     },
                     icon: const Icon(Icons.refresh),
-                    label: const Text('Erneut versuchen'),
+                    label: const Text(
+                      'Erneut versuchen',
+                    ),
                   ),
                 ],
               ),
@@ -129,9 +181,13 @@ class _AddWorkDayPageState extends ConsumerState<AddWorkDayPage> {
           );
         },
         data: (districts) {
-          final activeDistricts = districts
-              .where((district) => district.isActive)
-              .toList();
+          final activeDistricts =
+              districts
+                  .where(
+                    (district) =>
+                        district.isActive,
+                  )
+                  .toList();
 
           return _buildForm(
             context,
@@ -146,37 +202,60 @@ class _AddWorkDayPageState extends ConsumerState<AddWorkDayPage> {
     BuildContext context,
     List<District> districts,
   ) {
-    final isWorkDay = _type == WorkDayType.work;
+    final isWorkDay =
+        _type == WorkDayType.work;
+
     final hasOwnDistrict =
-        _assignmentType == WorkAssignmentType.ownDistrict;
+        _assignmentType ==
+            WorkAssignmentType.ownDistrict;
 
     return ListView(
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 40),
+      padding: const EdgeInsets.fromLTRB(
+        16,
+        16,
+        16,
+        40,
+      ),
       children: [
         _SectionCard(
           title: 'Tag',
-          icon: Icons.calendar_today_outlined,
+          icon:
+              Icons.calendar_today_outlined,
           child: Column(
             children: [
               ListTile(
-                contentPadding: EdgeInsets.zero,
-                title: const Text('Datum'),
-                subtitle: Text(_formatDate(_date)),
-                trailing: const Icon(Icons.chevron_right),
+                contentPadding:
+                    EdgeInsets.zero,
+                title:
+                    const Text('Datum'),
+                subtitle:
+                    Text(_formatDate(_date)),
+                trailing:
+                    const Icon(
+                  Icons.chevron_right,
+                ),
                 onTap: _selectDate,
               ),
               const Divider(),
-              DropdownButtonFormField<WorkDayType>(
+              DropdownButtonFormField<
+                  WorkDayType>(
                 initialValue: _type,
-                decoration: const InputDecoration(
+                decoration:
+                    const InputDecoration(
                   labelText: 'Tagesart',
-                  border: OutlineInputBorder(),
+                  border:
+                      OutlineInputBorder(),
                 ),
                 items: WorkDayType.values
                     .map(
-                      (type) => DropdownMenuItem(
+                      (type) =>
+                          DropdownMenuItem(
                         value: type,
-                        child: Text(_workDayTypeLabel(type)),
+                        child: Text(
+                          _workDayTypeLabel(
+                            type,
+                          ),
+                        ),
                       ),
                     )
                     .toList(),
@@ -199,48 +278,78 @@ class _AddWorkDayPageState extends ConsumerState<AddWorkDayPage> {
             title: 'Einsatz',
             icon: Icons.badge_outlined,
             child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+              crossAxisAlignment:
+                  CrossAxisAlignment.start,
               children: [
-                SegmentedButton<WorkAssignmentType>(
+                SegmentedButton<
+                    WorkAssignmentType>(
                   segments: const [
                     ButtonSegment(
-                      value: WorkAssignmentType.ownDistrict,
-                      label: Text('Eigener Bezirk'),
-                      icon: Icon(Icons.route_outlined),
+                      value:
+                          WorkAssignmentType
+                              .ownDistrict,
+                      label: Text(
+                        'Eigener Bezirk',
+                      ),
+                      icon: Icon(
+                        Icons.route_outlined,
+                      ),
                     ),
                     ButtonSegment(
-                      value: WorkAssignmentType.packageDriver,
-                      label: Text('Paketfahrer'),
-                      icon: Icon(Icons.local_shipping_outlined),
+                      value:
+                          WorkAssignmentType
+                              .packageDriver,
+                      label: Text(
+                        'Paketfahrer',
+                      ),
+                      icon: Icon(
+                        Icons
+                            .local_shipping_outlined,
+                      ),
                     ),
                   ],
                   selected: {
                     _assignmentType,
                   },
-                  onSelectionChanged: (selection) {
+                  onSelectionChanged:
+                      (selection) {
                     setState(() {
-                      _assignmentType = selection.first;
+                      _assignmentType =
+                          selection.first;
 
                       if (_assignmentType ==
-                          WorkAssignmentType.packageDriver) {
-                        _districtNumber = null;
+                          WorkAssignmentType
+                              .packageDriver) {
+                        _districtNumber =
+                            null;
                       }
                     });
                   },
                 ),
                 if (hasOwnDistrict) ...[
-                  const SizedBox(height: 20),
-                  DropdownButtonFormField<int>(
-                    initialValue: _districtNumber,
-                    decoration: const InputDecoration(
+                  const SizedBox(
+                    height: 20,
+                  ),
+                  DropdownButtonFormField<
+                      int>(
+                    initialValue:
+                        _districtNumber,
+                    decoration:
+                        const InputDecoration(
                       labelText: 'Bezirk',
-                      border: OutlineInputBorder(),
+                      border:
+                          OutlineInputBorder(),
                     ),
-                    hint: const Text('Bezirk auswählen'),
+                    hint: const Text(
+                      'Bezirk auswählen',
+                    ),
                     items: districts
                         .map(
-                          (district) => DropdownMenuItem<int>(
-                            value: district.number,
+                          (district) =>
+                              DropdownMenuItem<
+                                  int>(
+                            value:
+                                district.number,
                             child: Text(
                               'Bezirk ${district.number}',
                             ),
@@ -249,46 +358,67 @@ class _AddWorkDayPageState extends ConsumerState<AddWorkDayPage> {
                         .toList(),
                     onChanged: (value) {
                       setState(() {
-                        _districtNumber = value;
+                        _districtNumber =
+                            value;
                       });
                     },
                   ),
-                  const SizedBox(height: 16),
-                  DropdownButtonFormField<DistrictPart>(
-                    initialValue: _districtPart,
-                    decoration: const InputDecoration(
-                      labelText: 'Bezirksteil',
-                      border: OutlineInputBorder(),
+                  const SizedBox(
+                    height: 16,
+                  ),
+                  DropdownButtonFormField<
+                      DistrictPart>(
+                    initialValue:
+                        _districtPart,
+                    decoration:
+                        const InputDecoration(
+                      labelText:
+                          'Bezirksteil',
+                      border:
+                          OutlineInputBorder(),
                     ),
-                    items: DistrictPart.values
-                        .map(
-                          (part) => DropdownMenuItem(
-                            value: part,
-                            child: Text(
-                              _districtPartLabel(part),
-                            ),
-                          ),
-                        )
-                        .toList(),
+                    items:
+                        DistrictPart.values
+                            .map(
+                              (part) =>
+                                  DropdownMenuItem(
+                                value: part,
+                                child: Text(
+                                  _districtPartLabel(
+                                    part,
+                                  ),
+                                ),
+                              ),
+                            )
+                            .toList(),
                     onChanged: (value) {
                       if (value == null) {
                         return;
                       }
 
                       setState(() {
-                        _districtPart = value;
+                        _districtPart =
+                            value;
                       });
                     },
                   ),
                 ] else ...[
-                  const SizedBox(height: 16),
+                  const SizedBox(
+                    height: 16,
+                  ),
                   Text(
                     'Du bist an diesem Tag zusätzliche Unterstützung '
                     'und übernimmst Pakete von regulär besetzten Bezirken.',
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          color: Theme.of(context)
-                              .colorScheme
-                              .onSurfaceVariant,
+                    style: Theme.of(context)
+                        .textTheme
+                        .bodyMedium
+                        ?.copyWith(
+                          color:
+                              Theme.of(
+                                context,
+                              )
+                                  .colorScheme
+                                  .onSurfaceVariant,
                         ),
                   ),
                 ],
@@ -298,18 +428,24 @@ class _AddWorkDayPageState extends ConsumerState<AddWorkDayPage> {
           const SizedBox(height: 16),
           _SectionCard(
             title: 'Zeiten',
-            icon: Icons.schedule_outlined,
+            icon:
+                Icons.schedule_outlined,
             child: Column(
               children: [
                 _TimeRow(
-                  label: 'Arbeitsbeginn',
+                  label:
+                      'Arbeitsbeginn',
                   value: _workStart,
                   onTap: () async {
-                    final time = await _pickTime(_workStart);
+                    final time =
+                        await _pickTime(
+                      _workStart,
+                    );
 
                     if (time != null) {
                       setState(() {
-                        _workStart = time;
+                        _workStart =
+                            time;
                       });
                     }
                   },
@@ -317,37 +453,51 @@ class _AddWorkDayPageState extends ConsumerState<AddWorkDayPage> {
                 const Divider(),
                 _TimeRow(
                   label: 'Abfahrt',
-                  value: _departureTime,
+                  value:
+                      _departureTime,
                   onTap: () async {
-                    final time = await _pickTime(_departureTime);
+                    final time =
+                        await _pickTime(
+                      _departureTime,
+                    );
 
                     if (time != null) {
                       setState(() {
-                        _departureTime = time;
+                        _departureTime =
+                            time;
                       });
                     }
                   },
                 ),
                 const Divider(),
                 _TimeRow(
-                  label: 'Zustellende',
+                  label:
+                      'Zustellende',
                   value: _deliveryEnd,
                   onTap: () async {
-                    final time = await _pickTime(_deliveryEnd);
+                    final time =
+                        await _pickTime(
+                      _deliveryEnd,
+                    );
 
                     if (time != null) {
                       setState(() {
-                        _deliveryEnd = time;
+                        _deliveryEnd =
+                            time;
                       });
                     }
                   },
                 ),
                 const Divider(),
                 _TimeRow(
-                  label: 'Arbeitsende',
+                  label:
+                      'Arbeitsende',
                   value: _workEnd,
                   onTap: () async {
-                    final time = await _pickTime(_workEnd);
+                    final time =
+                        await _pickTime(
+                      _workEnd,
+                    );
 
                     if (time != null) {
                       setState(() {
@@ -356,33 +506,49 @@ class _AddWorkDayPageState extends ConsumerState<AddWorkDayPage> {
                     }
                   },
                 ),
-                const SizedBox(height: 12),
-                DropdownButtonFormField<int>(
-                  initialValue: _breakMinutes,
-                  decoration: const InputDecoration(
+                const SizedBox(
+                  height: 12,
+                ),
+                DropdownButtonFormField<
+                    int>(
+                  initialValue:
+                      _breakMinutes,
+                  decoration:
+                      const InputDecoration(
                     labelText: 'Pause',
-                    border: OutlineInputBorder(),
+                    border:
+                        OutlineInputBorder(),
                   ),
                   items: const [
                     DropdownMenuItem(
                       value: 0,
-                      child: Text('Keine Pause'),
+                      child: Text(
+                        'Keine Pause',
+                      ),
                     ),
                     DropdownMenuItem(
                       value: 15,
-                      child: Text('15 Minuten'),
+                      child: Text(
+                        '15 Minuten',
+                      ),
                     ),
                     DropdownMenuItem(
                       value: 30,
-                      child: Text('30 Minuten'),
+                      child: Text(
+                        '30 Minuten',
+                      ),
                     ),
                     DropdownMenuItem(
                       value: 45,
-                      child: Text('45 Minuten'),
+                      child: Text(
+                        '45 Minuten',
+                      ),
                     ),
                     DropdownMenuItem(
                       value: 60,
-                      child: Text('60 Minuten'),
+                      child: Text(
+                        '60 Minuten',
+                      ),
                     ),
                   ],
                   onChanged: (value) {
@@ -391,7 +557,8 @@ class _AddWorkDayPageState extends ConsumerState<AddWorkDayPage> {
                     }
 
                     setState(() {
-                      _breakMinutes = value;
+                      _breakMinutes =
+                          value;
                     });
                   },
                 ),
@@ -399,29 +566,48 @@ class _AddWorkDayPageState extends ConsumerState<AddWorkDayPage> {
             ),
           ),
           if (hasOwnDistrict) ...[
-            const SizedBox(height: 16),
+            const SizedBox(
+              height: 16,
+            ),
             _SectionCard(
               title: 'Eigene Tour',
-              icon: Icons.inventory_2_outlined,
+              icon: Icons
+                  .inventory_2_outlined,
               child: Column(
                 children: [
                   TextField(
-                    controller: _packageCountController,
-                    keyboardType: TextInputType.number,
-                    decoration: const InputDecoration(
-                      labelText: 'Pakete',
-                      hintText: 'z. B. 85',
-                      border: OutlineInputBorder(),
+                    controller:
+                        _packageCountController,
+                    keyboardType:
+                        TextInputType
+                            .number,
+                    decoration:
+                        const InputDecoration(
+                      labelText:
+                          'Pakete',
+                      hintText:
+                          'z. B. 85',
+                      border:
+                          OutlineInputBorder(),
                     ),
                   ),
-                  const SizedBox(height: 16),
+                  const SizedBox(
+                    height: 16,
+                  ),
                   TextField(
-                    controller: _cancelledPackageCountController,
-                    keyboardType: TextInputType.number,
-                    decoration: const InputDecoration(
-                      labelText: 'Abgebrochene Pakete',
-                      hintText: 'z. B. 2',
-                      border: OutlineInputBorder(),
+                    controller:
+                        _cancelledPackageCountController,
+                    keyboardType:
+                        TextInputType
+                            .number,
+                    decoration:
+                        const InputDecoration(
+                      labelText:
+                          'Abgebrochene Pakete',
+                      hintText:
+                          'z. B. 2',
+                      border:
+                          OutlineInputBorder(),
                     ),
                   ),
                 ],
@@ -436,31 +622,45 @@ class _AddWorkDayPageState extends ConsumerState<AddWorkDayPage> {
           const SizedBox(height: 16),
           _SectionCard(
             title: 'Werbung',
-            icon: Icons.campaign_outlined,
+            icon:
+                Icons.campaign_outlined,
             child: Column(
               children: [
                 SwitchListTile(
-                  contentPadding: EdgeInsets.zero,
-                  title: const Text('Werbung mitgenommen'),
-                  value: _hasAdvertising,
+                  contentPadding:
+                      EdgeInsets.zero,
+                  title: const Text(
+                    'Werbung mitgenommen',
+                  ),
+                  value:
+                      _hasAdvertising,
                   onChanged: (value) {
                     setState(() {
-                      _hasAdvertising = value;
+                      _hasAdvertising =
+                          value;
 
                       if (!value) {
-                        _advertisingController.clear();
+                        _advertisingController
+                            .clear();
                       }
                     });
                   },
                 ),
                 if (_hasAdvertising) ...[
-                  const SizedBox(height: 8),
+                  const SizedBox(
+                    height: 8,
+                  ),
                   TextField(
-                    controller: _advertisingController,
-                    decoration: const InputDecoration(
-                      labelText: 'Welche Werbung?',
-                      hintText: 'z. B. Einkauf Aktuell',
-                      border: OutlineInputBorder(),
+                    controller:
+                        _advertisingController,
+                    decoration:
+                        const InputDecoration(
+                      labelText:
+                          'Welche Werbung?',
+                      hintText:
+                          'z. B. Einkauf Aktuell',
+                      border:
+                          OutlineInputBorder(),
                     ),
                   ),
                 ],
@@ -470,14 +670,19 @@ class _AddWorkDayPageState extends ConsumerState<AddWorkDayPage> {
           const SizedBox(height: 16),
           _SectionCard(
             title: 'Bemerkungen',
-            icon: Icons.notes_outlined,
+            icon:
+                Icons.notes_outlined,
             child: TextField(
-              controller: _notesController,
+              controller:
+                  _notesController,
               minLines: 3,
               maxLines: 6,
-              decoration: const InputDecoration(
-                hintText: 'Optionale Bemerkungen zum Arbeitstag',
-                border: OutlineInputBorder(),
+              decoration:
+                  const InputDecoration(
+                hintText:
+                    'Optionale Bemerkungen zum Arbeitstag',
+                border:
+                    OutlineInputBorder(),
               ),
             ),
           ),
@@ -493,13 +698,21 @@ class _AddWorkDayPageState extends ConsumerState<AddWorkDayPage> {
               ? const SizedBox(
                   width: 18,
                   height: 18,
-                  child: CircularProgressIndicator(
+                  child:
+                      CircularProgressIndicator(
                     strokeWidth: 2,
                   ),
                 )
-              : const Icon(Icons.save_outlined),
+              : const Icon(
+                  Icons.save_outlined,
+                ),
           label: Text(
-            _isSaving ? 'Wird gespeichert...' : 'Arbeitstag speichern',
+            _isSaving
+                ? 'Wird gespeichert...'
+                : widget.existingWorkDay ==
+                        null
+                    ? 'Arbeitstag speichern'
+                    : 'Änderungen speichern',
           ),
         ),
       ],
@@ -514,36 +727,62 @@ class _AddWorkDayPageState extends ConsumerState<AddWorkDayPage> {
       title: 'Unterstützungen',
       icon: Icons.group_outlined,
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment:
+            CrossAxisAlignment.start,
         children: [
           Text(
-            _assignmentType == WorkAssignmentType.packageDriver
+            _assignmentType ==
+                    WorkAssignmentType
+                        .packageDriver
                 ? 'Trage hier die Bezirke ein, von denen du Pakete '
                     'übernommen hast.'
                 : 'Wenn du nach deiner eigenen Tour noch Kollegen '
                     'unterstützt hast, kannst du diese hier eintragen.',
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+            style: Theme.of(context)
+                .textTheme
+                .bodyMedium
+                ?.copyWith(
+                  color: Theme.of(context)
+                      .colorScheme
+                      .onSurfaceVariant,
                 ),
           ),
-          if (_supportDrafts.isNotEmpty) ...[
-            const SizedBox(height: 16),
+          if (_supportDrafts
+              .isNotEmpty) ...[
+            const SizedBox(
+              height: 16,
+            ),
             for (var index = 0;
-                index < _supportDrafts.length;
+                index <
+                    _supportDrafts.length;
                 index++) ...[
               _SupportEditor(
-                key: ValueKey(_supportDrafts[index].key),
-                draft: _supportDrafts[index],
+                key: ValueKey(
+                  _supportDrafts[index]
+                      .key,
+                ),
+                draft:
+                    _supportDrafts[index],
                 districts: districts,
                 onDelete: () {
                   setState(() {
-                    final draft = _supportDrafts.removeAt(index);
+                    final draft =
+                        _supportDrafts
+                            .removeAt(
+                      index,
+                    );
+
                     draft.dispose();
                   });
                 },
               ),
-              if (index != _supportDrafts.length - 1)
-                const SizedBox(height: 16),
+              if (index !=
+                  _supportDrafts
+                          .length -
+                      1)
+                const SizedBox(
+                  height: 16,
+                ),
             ],
           ],
           const SizedBox(height: 16),
@@ -555,8 +794,11 @@ class _AddWorkDayPageState extends ConsumerState<AddWorkDayPage> {
                 );
               });
             },
-            icon: const Icon(Icons.add),
-            label: const Text('Unterstützung hinzufügen'),
+            icon:
+                const Icon(Icons.add),
+            label: const Text(
+              'Unterstützung hinzufügen',
+            ),
           ),
         ],
       ),
@@ -564,7 +806,8 @@ class _AddWorkDayPageState extends ConsumerState<AddWorkDayPage> {
   }
 
   Future<void> _selectDate() async {
-    final selectedDate = await showDatePicker(
+    final selectedDate =
+        await showDatePicker(
       context: context,
       initialDate: _date,
       firstDate: DateTime(2020),
@@ -589,15 +832,20 @@ class _AddWorkDayPageState extends ConsumerState<AddWorkDayPage> {
   ) {
     return showTimePicker(
       context: context,
-      initialTime: currentValue ?? TimeOfDay.now(),
+      initialTime:
+          currentValue ??
+              TimeOfDay.now(),
     );
   }
 
   Future<void> _save(
     List<District> districts,
   ) async {
-    if (_type == WorkDayType.work &&
-        _assignmentType == WorkAssignmentType.ownDistrict &&
+    if (_type ==
+            WorkDayType.work &&
+        _assignmentType ==
+            WorkAssignmentType
+                .ownDistrict &&
         _districtNumber == null) {
       _showMessage(
         'Bitte wähle deinen Bezirk aus.',
@@ -605,19 +853,26 @@ class _AddWorkDayPageState extends ConsumerState<AddWorkDayPage> {
       return;
     }
 
-    if (_type == WorkDayType.work) {
-      for (final draft in _supportDrafts) {
-        if (draft.districtNumber == null) {
+    if (_type ==
+        WorkDayType.work) {
+      for (final draft
+          in _supportDrafts) {
+        if (draft.districtNumber ==
+            null) {
           _showMessage(
             'Bitte wähle bei jeder Unterstützung einen Bezirk aus.',
           );
           return;
         }
 
-        final packages = int.tryParse(
-              draft.packageController.text.trim(),
-            ) ??
-            0;
+        final packages =
+            int.tryParse(
+                  draft
+                      .packageController
+                      .text
+                      .trim(),
+                ) ??
+                0;
 
         if (packages <= 0) {
           _showMessage(
@@ -628,7 +883,9 @@ class _AddWorkDayPageState extends ConsumerState<AddWorkDayPage> {
         }
       }
 
-      if (_assignmentType == WorkAssignmentType.packageDriver &&
+      if (_assignmentType ==
+              WorkAssignmentType
+                  .packageDriver &&
           _supportDrafts.isEmpty) {
         _showMessage(
           'Bitte füge mindestens eine Unterstützung hinzu.',
@@ -637,17 +894,24 @@ class _AddWorkDayPageState extends ConsumerState<AddWorkDayPage> {
       }
     }
 
-    final packageCount = int.tryParse(
-          _packageCountController.text.trim(),
-        ) ??
-        0;
+    final packageCount =
+        int.tryParse(
+              _packageCountController
+                  .text
+                  .trim(),
+            ) ??
+            0;
 
-    final cancelledPackageCount = int.tryParse(
-          _cancelledPackageCountController.text.trim(),
-        ) ??
-        0;
+    final cancelledPackageCount =
+        int.tryParse(
+              _cancelledPackageCountController
+                  .text
+                  .trim(),
+            ) ??
+            0;
 
-    if (cancelledPackageCount > packageCount) {
+    if (cancelledPackageCount >
+        packageCount) {
       _showMessage(
         'Abgebrochene Pakete können nicht höher als die '
         'gesamte Paketmenge sein.',
@@ -655,47 +919,87 @@ class _AddWorkDayPageState extends ConsumerState<AddWorkDayPage> {
       return;
     }
 
-    final id = const Uuid().v4();
+    final id =
+        widget.existingWorkDay?.id ??
+            const Uuid().v4();
 
     final workDay = WorkDay(
       id: id,
       date: _date,
       type: _type,
-      assignmentType: _assignmentType,
-      districtId: _type == WorkDayType.work &&
-              _assignmentType == WorkAssignmentType.ownDistrict
-          ? _districtNumber?.toString()
-          : null,
-      districtPart: _districtPart,
-      workStart: _type == WorkDayType.work
-          ? _timeToMinutes(_workStart)
-          : null,
-      departureTime: _type == WorkDayType.work
-          ? _timeToMinutes(_departureTime)
-          : null,
-      deliveryEnd: _type == WorkDayType.work
-          ? _timeToMinutes(_deliveryEnd)
-          : null,
-      workEnd: _type == WorkDayType.work
-          ? _timeToMinutes(_workEnd)
-          : null,
-      breakMinutes: _type == WorkDayType.work
-          ? _breakMinutes
-          : 0,
-      packageCount: _type == WorkDayType.work &&
-              _assignmentType == WorkAssignmentType.ownDistrict
-          ? packageCount
-          : 0,
-      cancelledPackageCount: _type == WorkDayType.work &&
-              _assignmentType == WorkAssignmentType.ownDistrict
-          ? cancelledPackageCount
-          : 0,
+      assignmentType:
+          _assignmentType,
+      districtId:
+          _type ==
+                      WorkDayType.work &&
+                  _assignmentType ==
+                      WorkAssignmentType
+                          .ownDistrict
+              ? _districtNumber
+                  ?.toString()
+              : null,
+      districtPart:
+          _districtPart,
+      workStart:
+          _type ==
+                  WorkDayType.work
+              ? _timeToMinutes(
+                  _workStart,
+                )
+              : null,
+      departureTime:
+          _type ==
+                  WorkDayType.work
+              ? _timeToMinutes(
+                  _departureTime,
+                )
+              : null,
+      deliveryEnd:
+          _type ==
+                  WorkDayType.work
+              ? _timeToMinutes(
+                  _deliveryEnd,
+                )
+              : null,
+      workEnd:
+          _type ==
+                  WorkDayType.work
+              ? _timeToMinutes(
+                  _workEnd,
+                )
+              : null,
+      breakMinutes:
+          _type ==
+                  WorkDayType.work
+              ? _breakMinutes
+              : 0,
+      packageCount:
+          _type ==
+                      WorkDayType.work &&
+                  _assignmentType ==
+                      WorkAssignmentType
+                          .ownDistrict
+              ? packageCount
+              : 0,
+      cancelledPackageCount:
+          _type ==
+                      WorkDayType.work &&
+                  _assignmentType ==
+                      WorkAssignmentType
+                          .ownDistrict
+              ? cancelledPackageCount
+              : 0,
       hasAdvertising:
-          _type == WorkDayType.work && _hasAdvertising,
+          _type ==
+                  WorkDayType.work &&
+              _hasAdvertising,
       advertising:
-          _type == WorkDayType.work && _hasAdvertising
+          _type ==
+                      WorkDayType.work &&
+                  _hasAdvertising
               ? _nullIfEmpty(
-                  _advertisingController.text,
+                  _advertisingController
+                      .text,
                 )
               : null,
       notes: _nullIfEmpty(
@@ -703,41 +1007,66 @@ class _AddWorkDayPageState extends ConsumerState<AddWorkDayPage> {
       ),
     );
 
-    final supportEntries = _type == WorkDayType.work
-        ? _supportDrafts
-            .map(
-              (draft) => SupportEntry(
-                workDayId: id,
-                district: draft.districtNumber.toString(),
-                packagesTaken: int.tryParse(
-                      draft.packageController.text.trim(),
-                    ) ??
-                    0,
-                note: _nullIfEmpty(
-                  draft.noteController.text,
-                ),
-              ),
-            )
-            .toList()
-        : <SupportEntry>[];
+    final supportEntries =
+        _type ==
+                WorkDayType.work
+            ? _supportDrafts
+                .map(
+                  (draft) =>
+                      SupportEntry(
+                    workDayId: id,
+                    district: draft
+                        .districtNumber
+                        .toString(),
+                    packagesTaken:
+                        int.tryParse(
+                              draft
+                                  .packageController
+                                  .text
+                                  .trim(),
+                            ) ??
+                            0,
+                    note:
+                        _nullIfEmpty(
+                      draft
+                          .noteController
+                          .text,
+                    ),
+                  ),
+                )
+                .toList()
+            : <SupportEntry>[];
 
     setState(() {
       _isSaving = true;
     });
 
     try {
-      await ref
-          .read(workDayProvider.notifier)
-          .saveWorkDay(
-            workDay: workDay,
-            supportEntries: supportEntries,
-          );
+      final notifier = ref.read(
+        workDayProvider.notifier,
+      );
+
+      if (widget.existingWorkDay ==
+          null) {
+        await notifier.saveWorkDay(
+          workDay: workDay,
+          supportEntries:
+              supportEntries,
+        );
+      } else {
+        await notifier.updateWorkDay(
+          workDay: workDay,
+          supportEntries:
+              supportEntries,
+        );
+      }
 
       if (!mounted) {
         return;
       }
 
-      Navigator.of(context).pop(true);
+      Navigator.of(context)
+          .pop(true);
     } catch (error) {
       if (!mounted) {
         return;
@@ -755,24 +1084,46 @@ class _AddWorkDayPageState extends ConsumerState<AddWorkDayPage> {
     }
   }
 
-  void _showMessage(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
+  void _showMessage(
+    String message,
+  ) {
+    ScaffoldMessenger.of(context)
+        .showSnackBar(
       SnackBar(
         content: Text(message),
       ),
     );
   }
 
-  static int? _timeToMinutes(TimeOfDay? time) {
+  static int? _timeToMinutes(
+    TimeOfDay? time,
+  ) {
     if (time == null) {
       return null;
     }
 
-    return (time.hour * 60) + time.minute;
+    return (time.hour * 60) +
+        time.minute;
   }
 
-  static String? _nullIfEmpty(String value) {
-    final trimmed = value.trim();
+  static TimeOfDay? _minutesToTime(
+    int? minutes,
+  ) {
+    if (minutes == null) {
+      return null;
+    }
+
+    return TimeOfDay(
+      hour: minutes ~/ 60,
+      minute: minutes % 60,
+    );
+  }
+
+  static String? _nullIfEmpty(
+    String value,
+  ) {
+    final trimmed =
+        value.trim();
 
     if (trimmed.isEmpty) {
       return null;
@@ -781,14 +1132,23 @@ class _AddWorkDayPageState extends ConsumerState<AddWorkDayPage> {
     return trimmed;
   }
 
-  static String _formatDate(DateTime date) {
-    final day = date.day.toString().padLeft(2, '0');
-    final month = date.month.toString().padLeft(2, '0');
+  static String _formatDate(
+    DateTime date,
+  ) {
+    final day = date.day
+        .toString()
+        .padLeft(2, '0');
+
+    final month = date.month
+        .toString()
+        .padLeft(2, '0');
 
     return '$day.$month.${date.year}';
   }
 
-  static String _workDayTypeLabel(WorkDayType type) {
+  static String _workDayTypeLabel(
+    WorkDayType type,
+  ) {
     switch (type) {
       case WorkDayType.work:
         return 'Arbeit';
@@ -803,7 +1163,9 @@ class _AddWorkDayPageState extends ConsumerState<AddWorkDayPage> {
     }
   }
 
-  static String _districtPartLabel(DistrictPart part) {
+  static String _districtPartLabel(
+    DistrictPart part,
+  ) {
     switch (part) {
       case DistrictPart.full:
         return 'Ganzer Bezirk';
@@ -815,7 +1177,8 @@ class _AddWorkDayPageState extends ConsumerState<AddWorkDayPage> {
   }
 }
 
-class _SectionCard extends StatelessWidget {
+class _SectionCard
+    extends StatelessWidget {
   const _SectionCard({
     required this.title,
     required this.icon,
@@ -827,30 +1190,47 @@ class _SectionCard extends StatelessWidget {
   final Widget child;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(
+    BuildContext context,
+  ) {
     return Card(
       margin: EdgeInsets.zero,
       child: Padding(
-        padding: const EdgeInsets.all(18),
+        padding:
+            const EdgeInsets.all(18),
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+          crossAxisAlignment:
+              CrossAxisAlignment.start,
           children: [
             Row(
               children: [
                 Icon(
                   icon,
-                  color: Theme.of(context).colorScheme.primary,
+                  color:
+                      Theme.of(context)
+                          .colorScheme
+                          .primary,
                 ),
-                const SizedBox(width: 10),
+                const SizedBox(
+                  width: 10,
+                ),
                 Text(
                   title,
-                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                        fontWeight: FontWeight.bold,
-                      ),
+                  style:
+                      Theme.of(context)
+                          .textTheme
+                          .titleLarge
+                          ?.copyWith(
+                            fontWeight:
+                                FontWeight
+                                    .bold,
+                          ),
                 ),
               ],
             ),
-            const SizedBox(height: 18),
+            const SizedBox(
+              height: 18,
+            ),
             child,
           ],
         ),
@@ -859,7 +1239,8 @@ class _SectionCard extends StatelessWidget {
   }
 }
 
-class _TimeRow extends StatelessWidget {
+class _TimeRow
+    extends StatelessWidget {
   const _TimeRow({
     required this.label,
     required this.value,
@@ -871,21 +1252,36 @@ class _TimeRow extends StatelessWidget {
   final VoidCallback onTap;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(
+    BuildContext context,
+  ) {
     return ListTile(
-      contentPadding: EdgeInsets.zero,
+      contentPadding:
+          EdgeInsets.zero,
       title: Text(label),
       trailing: Row(
-        mainAxisSize: MainAxisSize.min,
+        mainAxisSize:
+            MainAxisSize.min,
         children: [
           Text(
-            value?.format(context) ?? '--:--',
-            style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                  fontWeight: FontWeight.w600,
-                ),
+            value?.format(context) ??
+                '--:--',
+            style:
+                Theme.of(context)
+                    .textTheme
+                    .titleMedium
+                    ?.copyWith(
+                      fontWeight:
+                          FontWeight
+                              .w600,
+                    ),
           ),
-          const SizedBox(width: 8),
-          const Icon(Icons.chevron_right),
+          const SizedBox(
+            width: 8,
+          ),
+          const Icon(
+            Icons.chevron_right,
+          ),
         ],
       ),
       onTap: onTap,
@@ -893,7 +1289,8 @@ class _TimeRow extends StatelessWidget {
   }
 }
 
-class _SupportEditor extends StatefulWidget {
+class _SupportEditor
+    extends StatefulWidget {
   const _SupportEditor({
     super.key,
     required this.draft,
@@ -906,19 +1303,28 @@ class _SupportEditor extends StatefulWidget {
   final VoidCallback onDelete;
 
   @override
-  State<_SupportEditor> createState() => _SupportEditorState();
+  State<_SupportEditor>
+      createState() =>
+          _SupportEditorState();
 }
 
-class _SupportEditorState extends State<_SupportEditor> {
+class _SupportEditorState
+    extends State<_SupportEditor> {
   @override
-  Widget build(BuildContext context) {
+  Widget build(
+    BuildContext context,
+  ) {
     return Container(
-      padding: const EdgeInsets.all(14),
+      padding:
+          const EdgeInsets.all(14),
       decoration: BoxDecoration(
         border: Border.all(
-          color: Theme.of(context).colorScheme.outlineVariant,
+          color: Theme.of(context)
+              .colorScheme
+              .outlineVariant,
         ),
-        borderRadius: BorderRadius.circular(14),
+        borderRadius:
+            BorderRadius.circular(14),
       ),
       child: Column(
         children: [
@@ -927,30 +1333,52 @@ class _SupportEditorState extends State<_SupportEditor> {
               Expanded(
                 child: Text(
                   'Unterstützung',
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.w600,
-                      ),
+                  style:
+                      Theme.of(context)
+                          .textTheme
+                          .titleMedium
+                          ?.copyWith(
+                            fontWeight:
+                                FontWeight
+                                    .w600,
+                          ),
                 ),
               ),
               IconButton(
                 tooltip: 'Entfernen',
-                onPressed: widget.onDelete,
-                icon: const Icon(Icons.delete_outline),
+                onPressed:
+                    widget.onDelete,
+                icon: const Icon(
+                  Icons
+                      .delete_outline,
+                ),
               ),
             ],
           ),
-          const SizedBox(height: 8),
-          DropdownButtonFormField<int>(
-            initialValue: widget.draft.districtNumber,
-            decoration: const InputDecoration(
+          const SizedBox(
+            height: 8,
+          ),
+          DropdownButtonFormField<
+              int>(
+            initialValue:
+                widget.draft
+                    .districtNumber,
+            decoration:
+                const InputDecoration(
               labelText: 'Bezirk',
-              border: OutlineInputBorder(),
+              border:
+                  OutlineInputBorder(),
             ),
-            hint: const Text('Bezirk auswählen'),
+            hint: const Text(
+              'Bezirk auswählen',
+            ),
             items: widget.districts
                 .map(
-                  (district) => DropdownMenuItem<int>(
-                    value: district.number,
+                  (district) =>
+                      DropdownMenuItem<
+                          int>(
+                    value:
+                        district.number,
                     child: Text(
                       'Bezirk ${district.number}',
                     ),
@@ -959,27 +1387,44 @@ class _SupportEditorState extends State<_SupportEditor> {
                 .toList(),
             onChanged: (value) {
               setState(() {
-                widget.draft.districtNumber = value;
+                widget.draft
+                        .districtNumber =
+                    value;
               });
             },
           ),
-          const SizedBox(height: 12),
+          const SizedBox(
+            height: 12,
+          ),
           TextField(
-            controller: widget.draft.packageController,
-            keyboardType: TextInputType.number,
-            decoration: const InputDecoration(
-              labelText: 'Übernommene Pakete',
-              hintText: 'z. B. 20',
-              border: OutlineInputBorder(),
+            controller: widget.draft
+                .packageController,
+            keyboardType:
+                TextInputType.number,
+            decoration:
+                const InputDecoration(
+              labelText:
+                  'Übernommene Pakete',
+              hintText:
+                  'z. B. 20',
+              border:
+                  OutlineInputBorder(),
             ),
           ),
-          const SizedBox(height: 12),
+          const SizedBox(
+            height: 12,
+          ),
           TextField(
-            controller: widget.draft.noteController,
-            decoration: const InputDecoration(
-              labelText: 'Bemerkung',
+            controller:
+                widget.draft
+                    .noteController,
+            decoration:
+                const InputDecoration(
+              labelText:
+                  'Bemerkung',
               hintText: 'Optional',
-              border: OutlineInputBorder(),
+              border:
+                  OutlineInputBorder(),
             ),
           ),
         ],
@@ -991,15 +1436,37 @@ class _SupportEditorState extends State<_SupportEditor> {
 class _SupportDraft {
   _SupportDraft()
       : key = UniqueKey(),
-        packageController = TextEditingController(),
-        noteController = TextEditingController();
+        packageController =
+            TextEditingController(),
+        noteController =
+            TextEditingController();
+
+  _SupportDraft.fromEntry(
+    SupportEntry entry,
+  )   : key = UniqueKey(),
+        districtNumber =
+            int.tryParse(
+          entry.district,
+        ),
+        packageController =
+            TextEditingController(
+          text:
+              '${entry.packagesTaken}',
+        ),
+        noteController =
+            TextEditingController(
+          text: entry.note ?? '',
+        );
 
   final Key key;
 
   int? districtNumber;
 
-  final TextEditingController packageController;
-  final TextEditingController noteController;
+  final TextEditingController
+      packageController;
+
+  final TextEditingController
+      noteController;
 
   void dispose() {
     packageController.dispose();

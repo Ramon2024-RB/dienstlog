@@ -123,7 +123,15 @@ class _CalendarPageState extends ConsumerState<CalendarPage> {
     WorkDay? existingWorkDay,
   ) async {
     if (existingWorkDay != null) {
-      await showModalBottomSheet<void>(
+      final supportEntries = await ref
+          .read(workDayProvider.notifier)
+          .getSupportEntries(existingWorkDay.id);
+
+      if (!mounted) {
+        return;
+      }
+
+      final action = await showModalBottomSheet<_WorkDayAction>(
         context: context,
         showDragHandle: true,
         builder: (context) {
@@ -132,6 +140,30 @@ class _CalendarPageState extends ConsumerState<CalendarPage> {
           );
         },
       );
+
+      if (!mounted || action == null) {
+        return;
+      }
+
+      if (action == _WorkDayAction.edit) {
+        await Navigator.of(context).push<bool>(
+          MaterialPageRoute<bool>(
+            builder: (context) {
+              return AddWorkDayPage(
+                initialDate: existingWorkDay.date,
+                existingWorkDay: existingWorkDay,
+                initialSupportEntries: supportEntries,
+              );
+            },
+          ),
+        );
+
+        return;
+      }
+
+      if (action == _WorkDayAction.delete) {
+        await _deleteWorkDay(existingWorkDay);
+      }
 
       return;
     }
@@ -145,6 +177,68 @@ class _CalendarPageState extends ConsumerState<CalendarPage> {
         },
       ),
     );
+  }
+
+  Future<void> _deleteWorkDay(WorkDay workDay) async {
+    final shouldDelete = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: const Text('Arbeitstag löschen?'),
+          content: Text(
+            'Möchtest du den Eintrag vom ${_formatDate(workDay.date)} '
+            'wirklich löschen? Auch gespeicherte Unterstützungen dieses '
+            'Tages werden gelöscht.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.of(dialogContext).pop(false);
+              },
+              child: const Text('Abbrechen'),
+            ),
+            FilledButton(
+              onPressed: () {
+                Navigator.of(dialogContext).pop(true);
+              },
+              child: const Text('Löschen'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (shouldDelete != true || !mounted) {
+      return;
+    }
+
+    try {
+      await ref
+          .read(workDayProvider.notifier)
+          .deleteWorkDay(workDay.id);
+
+      if (!mounted) {
+        return;
+      }
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Arbeitstag wurde gelöscht.'),
+        ),
+      );
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Arbeitstag konnte nicht gelöscht werden: $error',
+          ),
+        ),
+      );
+    }
   }
 }
 
@@ -594,6 +688,11 @@ class _CalendarDayCell extends StatelessWidget {
   }
 }
 
+enum _WorkDayAction {
+  edit,
+  delete,
+}
+
 class _ExistingWorkDaySheet extends StatelessWidget {
   const _ExistingWorkDaySheet({
     required this.workDay,
@@ -639,18 +738,34 @@ class _ExistingWorkDaySheet extends StatelessWidget {
               const SizedBox(height: 8),
               _SheetInfoRow(
                 label: 'Eigene Pakete',
-                value:
-                    '${workDay.deliveredPackageCount}',
+                value: '${workDay.deliveredPackageCount}',
               ),
             ],
-            const SizedBox(height: 20),
-            Text(
-              'Bearbeiten und Löschen bauen wir als nächsten Schritt ein.',
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: Theme.of(context)
-                        .colorScheme
-                        .onSurfaceVariant,
-                  ),
+            const SizedBox(height: 24),
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton.icon(
+                onPressed: () {
+                  Navigator.of(context).pop(
+                    _WorkDayAction.edit,
+                  );
+                },
+                icon: const Icon(Icons.edit_outlined),
+                label: const Text('Bearbeiten'),
+              ),
+            ),
+            const SizedBox(height: 8),
+            SizedBox(
+              width: double.infinity,
+              child: TextButton.icon(
+                onPressed: () {
+                  Navigator.of(context).pop(
+                    _WorkDayAction.delete,
+                  );
+                },
+                icon: const Icon(Icons.delete_outline),
+                label: const Text('Löschen'),
+              ),
             ),
           ],
         ),

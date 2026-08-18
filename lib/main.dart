@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'screens/districts/districts_page.dart';
+import 'screens/work_days/add_work_day_page.dart';
 
 void main() {
   runApp(
@@ -19,6 +21,15 @@ class DienstLogApp extends StatelessWidget {
     return MaterialApp(
       title: 'DienstLog',
       debugShowCheckedModeBanner: false,
+      locale: const Locale('de', 'DE'),
+      supportedLocales: const [
+        Locale('de', 'DE'),
+      ],
+      localizationsDelegates: const [
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(
           seedColor: const Color(0xFFFFCC00),
@@ -156,7 +167,13 @@ class _OverviewPage extends StatelessWidget {
                   ),
                   const SizedBox(height: 16),
                   FilledButton.icon(
-                    onPressed: null,
+                    onPressed: () async {
+                      await Navigator.of(context).push<bool>(
+                        MaterialPageRoute<bool>(
+                          builder: (context) => const AddWorkDayPage(),
+                        ),
+                      );
+                    },
                     icon: const Icon(Icons.add),
                     label: const Text('Arbeitstag eintragen'),
                   ),
@@ -360,7 +377,9 @@ class _MorePage extends StatelessWidget {
                 ListTile(
                   leading: const Icon(Icons.settings_outlined),
                   title: const Text('Einstellungen'),
-                  subtitle: const Text('Arbeitszeiten und App-Einstellungen'),
+                  subtitle: const Text(
+                    'Arbeitszeiten und App-Einstellungen',
+                  ),
                   trailing: const Icon(Icons.chevron_right),
                   onTap: () {},
                 ),

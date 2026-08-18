@@ -13,18 +13,18 @@ import 'services/work_day_provider.dart';
 void main() {
   runApp(
     const ProviderScope(
-      child: DienstLogApp(),
+      child: TourLogApp(),
     ),
   );
 }
 
-class DienstLogApp extends StatelessWidget {
-  const DienstLogApp({super.key});
+class TourLogApp extends StatelessWidget {
+  const TourLogApp({super.key});
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'DienstLog',
+      title: 'TourLog',
       debugShowCheckedModeBanner: false,
       locale: const Locale('de', 'DE'),
       supportedLocales: const [
@@ -130,7 +130,7 @@ class _OverviewPage extends ConsumerWidget {
     return Scaffold(
       appBar: AppBar(
         title: const Text(
-          'DienstLog',
+          'TourLog',
           style: TextStyle(
             fontWeight: FontWeight.bold,
           ),

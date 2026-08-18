@@ -3,6 +3,7 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'models/work_day.dart';
+import 'screens/calendar/calendar_page.dart';
 import 'screens/districts/districts_page.dart';
 import 'screens/work_days/add_work_day_page.dart';
 import 'services/work_day_provider.dart';
@@ -64,7 +65,7 @@ class _MainNavigationPageState extends State<MainNavigationPage> {
 
   static const List<Widget> _pages = [
     _OverviewPage(),
-    _CalendarPage(),
+    CalendarPage(),
     _StatisticsPage(),
     _MorePage(),
   ];
@@ -428,8 +429,9 @@ class _TodayCard extends ConsumerWidget {
                 Text(
                   _assignmentSubtitle(workDay!),
                   style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color:
-                            Theme.of(context).colorScheme.onSurfaceVariant,
+                        color: Theme.of(context)
+                            .colorScheme
+                            .onSurfaceVariant,
                       ),
                 ),
                 const SizedBox(height: 20),
@@ -454,8 +456,7 @@ class _TodayCard extends ConsumerWidget {
                   const SizedBox(height: 10),
                   _TodayInfoRow(
                     label: 'Eigene Pakete',
-                    value:
-                        '${workDay!.deliveredPackageCount}',
+                    value: '${workDay!.deliveredPackageCount}',
                   ),
                 ],
                 const SizedBox(height: 10),
@@ -697,30 +698,6 @@ class _SummaryCard extends StatelessWidget {
             ),
           ],
         ),
-      ),
-    );
-  }
-}
-
-class _CalendarPage extends StatelessWidget {
-  const _CalendarPage();
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text(
-          'Kalender',
-          style: TextStyle(
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-      ),
-      body: const _PlaceholderContent(
-        icon: Icons.calendar_month_outlined,
-        title: 'Kalender',
-        description:
-            'Hier entsteht deine Monatsansicht mit Arbeit, Frei, Urlaub, Feiertagen und deinen täglichen Einträgen.',
       ),
     );
   }

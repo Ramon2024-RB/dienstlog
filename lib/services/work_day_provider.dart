@@ -42,6 +42,16 @@ class WorkDayNotifier extends AsyncNotifier<List<WorkDay>> {
     );
   }
 
+  Future<List<OwnTourEntry>> getOwnTourEntriesForDateRange(
+    DateTime startDate,
+    DateTime endDate,
+  ) async {
+    return _database.getOwnTourEntriesForDateRange(
+      startDate,
+      endDate,
+    );
+  }
+
   Future<int> getTotalOwnTourPackages(
     String workDayId,
   ) async {
@@ -55,6 +65,16 @@ class WorkDayNotifier extends AsyncNotifier<List<WorkDay>> {
     DateTime endDate,
   ) async {
     return _database.getTotalOwnTourPackagesForDateRange(
+      startDate,
+      endDate,
+    );
+  }
+
+  Future<int> getTotalCancelledOwnTourPackagesForDateRange(
+    DateTime startDate,
+    DateTime endDate,
+  ) async {
+    return _database.getTotalCancelledOwnTourPackagesForDateRange(
       startDate,
       endDate,
     );

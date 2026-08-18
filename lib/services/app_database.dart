@@ -414,6 +414,41 @@ class AppDatabase {
     return maps.map(OwnTourEntry.fromMap).toList();
   }
 
+  Future<List<OwnTourEntry>> getOwnTourEntriesForDateRange(
+    DateTime startDate,
+    DateTime endDate,
+  ) async {
+    final db = await database;
+
+    final normalizedStartDate = _normalizeDate(
+      startDate,
+    );
+
+    final normalizedEndDate = _normalizeDate(
+      endDate,
+    );
+
+    final maps = await db.rawQuery(
+      '''
+      SELECT ote.*
+      FROM own_tour_entries ote
+      INNER JOIN work_days wd
+        ON wd.id = ote.work_day_id
+      WHERE wd.date >= ?
+        AND wd.date <= ?
+        AND wd.type = ?
+      ORDER BY wd.date ASC, ote.id ASC
+      ''',
+      [
+        normalizedStartDate,
+        normalizedEndDate,
+        WorkDayType.work.name,
+      ],
+    );
+
+    return maps.map(OwnTourEntry.fromMap).toList();
+  }
+
   Future<int> insertOwnTourEntry(
     OwnTourEntry entry,
   ) async {
@@ -539,6 +574,45 @@ class AppDatabase {
             ELSE ote.package_count - ote.cancelled_package_count
           END
         ),
+        0
+      ) AS total
+      FROM own_tour_entries ote
+      INNER JOIN work_days wd
+        ON wd.id = ote.work_day_id
+      WHERE wd.date >= ?
+        AND wd.date <= ?
+        AND wd.type = ?
+      ''',
+      [
+        normalizedStartDate,
+        normalizedEndDate,
+        WorkDayType.work.name,
+      ],
+    );
+
+    return _readIntValue(
+      result.first['total'],
+    );
+  }
+
+  Future<int> getTotalCancelledOwnTourPackagesForDateRange(
+    DateTime startDate,
+    DateTime endDate,
+  ) async {
+    final db = await database;
+
+    final normalizedStartDate = _normalizeDate(
+      startDate,
+    );
+
+    final normalizedEndDate = _normalizeDate(
+      endDate,
+    );
+
+    final result = await db.rawQuery(
+      '''
+      SELECT COALESCE(
+        SUM(ote.cancelled_package_count),
         0
       ) AS total
       FROM own_tour_entries ote

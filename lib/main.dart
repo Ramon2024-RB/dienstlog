@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'models/work_day.dart';
 import 'screens/districts/districts_page.dart';
 import 'screens/work_days/add_work_day_page.dart';
+import 'services/work_day_provider.dart';
 
 void main() {
   runApp(
@@ -110,11 +112,13 @@ class _MainNavigationPageState extends State<MainNavigationPage> {
   }
 }
 
-class _OverviewPage extends StatelessWidget {
+class _OverviewPage extends ConsumerWidget {
   const _OverviewPage();
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final workDaysAsync = ref.watch(workDayProvider);
+
     return Scaffold(
       appBar: AppBar(
         title: const Text(
@@ -124,109 +128,523 @@ class _OverviewPage extends StatelessWidget {
           ),
         ),
       ),
-      body: ListView(
-        padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
-        children: [
-          Text(
-            'Übersicht',
-            style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                  fontWeight: FontWeight.bold,
-                ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'Dein heutiger Arbeitstag auf einen Blick.',
-            style: Theme.of(context).textTheme.bodyLarge,
-          ),
-          const SizedBox(height: 24),
-          Card(
+      body: workDaysAsync.when(
+        loading: () {
+          return const Center(
+            child: CircularProgressIndicator(),
+          );
+        },
+        error: (error, stackTrace) {
+          return Center(
             child: Padding(
-              padding: const EdgeInsets.all(20),
+              padding: const EdgeInsets.all(24),
               child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
                 children: [
-                  Row(
-                    children: [
-                      Icon(
-                        Icons.today_outlined,
-                        color: Theme.of(context).colorScheme.primary,
-                      ),
-                      const SizedBox(width: 10),
-                      Text(
-                        'Heute',
-                        style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                              fontWeight: FontWeight.bold,
-                            ),
-                      ),
-                    ],
+                  const Icon(
+                    Icons.error_outline,
+                    size: 48,
                   ),
-                  const SizedBox(height: 20),
-                  Text(
-                    'Noch kein Arbeitstag eingetragen.',
-                    style: Theme.of(context).textTheme.bodyLarge,
+                  const SizedBox(height: 16),
+                  const Text(
+                    'Die Arbeitsdaten konnten nicht geladen werden.',
+                    textAlign: TextAlign.center,
                   ),
                   const SizedBox(height: 16),
                   FilledButton.icon(
-                    onPressed: () async {
-                      await Navigator.of(context).push<bool>(
-                        MaterialPageRoute<bool>(
-                          builder: (context) => const AddWorkDayPage(),
-                        ),
-                      );
+                    onPressed: () {
+                      ref.invalidate(workDayProvider);
                     },
-                    icon: const Icon(Icons.add),
-                    label: const Text('Arbeitstag eintragen'),
+                    icon: const Icon(Icons.refresh),
+                    label: const Text('Erneut versuchen'),
                   ),
                 ],
               ),
             ),
-          ),
-          const SizedBox(height: 16),
-          Row(
-            children: [
-              Expanded(
-                child: _SummaryCard(
-                  title: 'Diese Woche',
-                  value: '0 h 00 min',
-                  subtitle: 'Arbeitszeit',
-                  icon: Icons.access_time,
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: _SummaryCard(
-                  title: 'Pakete',
-                  value: '0',
-                  subtitle: 'diese Woche',
-                  icon: Icons.inventory_2_outlined,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(
-                child: _SummaryCard(
-                  title: 'Unterstützung',
-                  value: '0',
-                  subtitle: 'Pakete übernommen',
-                  icon: Icons.group_outlined,
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: _SummaryCard(
-                  title: 'Dieser Monat',
-                  value: '0',
-                  subtitle: 'Arbeitstage',
-                  icon: Icons.calendar_today_outlined,
-                ),
-              ),
-            ],
-          ),
-        ],
+          );
+        },
+        data: (workDays) {
+          return _OverviewContent(
+            workDays: workDays,
+          );
+        },
       ),
+    );
+  }
+}
+
+class _OverviewContent extends ConsumerWidget {
+  const _OverviewContent({
+    required this.workDays,
+  });
+
+  final List<WorkDay> workDays;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final now = DateTime.now();
+    final today = DateTime(
+      now.year,
+      now.month,
+      now.day,
+    );
+
+    final todayWorkDay = _findWorkDayForDate(
+      workDays,
+      today,
+    );
+
+    final weekStart = today.subtract(
+      Duration(
+        days: today.weekday - DateTime.monday,
+      ),
+    );
+
+    final weekEnd = weekStart.add(
+      const Duration(days: 6),
+    );
+
+    final weekWorkDays = workDays.where((workDay) {
+      final date = _normalizeDate(workDay.date);
+
+      return !date.isBefore(weekStart) &&
+          !date.isAfter(weekEnd) &&
+          workDay.type == WorkDayType.work;
+    }).toList();
+
+    final monthWorkDays = workDays.where((workDay) {
+      return workDay.date.year == today.year &&
+          workDay.date.month == today.month &&
+          workDay.type == WorkDayType.work;
+    }).toList();
+
+    final weeklyWorkMinutes = weekWorkDays.fold<int>(
+      0,
+      (sum, workDay) {
+        return sum + (workDay.workDurationMinutes ?? 0);
+      },
+    );
+
+    final weeklyDeliveredPackages = weekWorkDays.fold<int>(
+      0,
+      (sum, workDay) {
+        return sum + workDay.deliveredPackageCount;
+      },
+    );
+
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
+      children: [
+        Text(
+          'Übersicht',
+          style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                fontWeight: FontWeight.bold,
+              ),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          'Dein heutiger Arbeitstag auf einen Blick.',
+          style: Theme.of(context).textTheme.bodyLarge,
+        ),
+        const SizedBox(height: 24),
+        _TodayCard(
+          workDay: todayWorkDay,
+        ),
+        const SizedBox(height: 16),
+        Row(
+          children: [
+            Expanded(
+              child: _SummaryCard(
+                title: 'Diese Woche',
+                value: _formatDuration(weeklyWorkMinutes),
+                subtitle: 'Arbeitszeit',
+                icon: Icons.access_time,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: _SummaryCard(
+                title: 'Pakete',
+                value: '$weeklyDeliveredPackages',
+                subtitle: 'eigene ausgeliefert',
+                icon: Icons.inventory_2_outlined,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            Expanded(
+              child: _TodaySupportSummaryCard(
+                workDay: todayWorkDay,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: _SummaryCard(
+                title: 'Dieser Monat',
+                value: '${monthWorkDays.length}',
+                subtitle: 'Arbeitstage',
+                icon: Icons.calendar_today_outlined,
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  static WorkDay? _findWorkDayForDate(
+    List<WorkDay> workDays,
+    DateTime date,
+  ) {
+    for (final workDay in workDays) {
+      if (_isSameDate(workDay.date, date)) {
+        return workDay;
+      }
+    }
+
+    return null;
+  }
+
+  static bool _isSameDate(
+    DateTime first,
+    DateTime second,
+  ) {
+    return first.year == second.year &&
+        first.month == second.month &&
+        first.day == second.day;
+  }
+
+  static DateTime _normalizeDate(DateTime date) {
+    return DateTime(
+      date.year,
+      date.month,
+      date.day,
+    );
+  }
+}
+
+class _TodayCard extends ConsumerWidget {
+  const _TodayCard({
+    required this.workDay,
+  });
+
+  final WorkDay? workDay;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    if (workDay == null) {
+      return Card(
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _TodayHeader(
+                icon: Icons.today_outlined,
+                title: 'Heute',
+              ),
+              const SizedBox(height: 20),
+              Text(
+                'Noch kein Arbeitstag eingetragen.',
+                style: Theme.of(context).textTheme.bodyLarge,
+              ),
+              const SizedBox(height: 16),
+              FilledButton.icon(
+                onPressed: () async {
+                  await Navigator.of(context).push<bool>(
+                    MaterialPageRoute<bool>(
+                      builder: (context) => AddWorkDayPage(
+                        initialDate: DateTime.now(),
+                      ),
+                    ),
+                  );
+                },
+                icon: const Icon(Icons.add),
+                label: const Text('Arbeitstag eintragen'),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    if (workDay!.type != WorkDayType.work) {
+      return Card(
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _TodayHeader(
+                icon: _workDayTypeIcon(workDay!.type),
+                title: 'Heute',
+              ),
+              const SizedBox(height: 20),
+              Text(
+                _workDayTypeLabel(workDay!.type),
+                style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                      fontWeight: FontWeight.bold,
+                    ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return FutureBuilder<int>(
+      future: ref
+          .read(workDayProvider.notifier)
+          .getTotalSupportPackages(
+            workDay!.id,
+          ),
+      builder: (context, snapshot) {
+        final supportPackages = snapshot.data ?? 0;
+
+        final totalDelivered =
+            workDay!.deliveredPackageCount + supportPackages;
+
+        return Card(
+          child: Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const _TodayHeader(
+                  icon: Icons.today_outlined,
+                  title: 'Heute',
+                ),
+                const SizedBox(height: 20),
+                Text(
+                  _assignmentTitle(workDay!),
+                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                        fontWeight: FontWeight.bold,
+                      ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  _assignmentSubtitle(workDay!),
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        color:
+                            Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
+                ),
+                const SizedBox(height: 20),
+                _TodayInfoRow(
+                  label: 'Arbeitszeit',
+                  value: workDay!.workDurationMinutes == null
+                      ? '–'
+                      : _formatDuration(
+                          workDay!.workDurationMinutes!,
+                        ),
+                ),
+                const SizedBox(height: 10),
+                _TodayInfoRow(
+                  label: 'Zeitraum',
+                  value: _formatTimeRange(
+                    workDay!.workStart,
+                    workDay!.workEnd,
+                  ),
+                ),
+                if (workDay!.assignmentType ==
+                    WorkAssignmentType.ownDistrict) ...[
+                  const SizedBox(height: 10),
+                  _TodayInfoRow(
+                    label: 'Eigene Pakete',
+                    value:
+                        '${workDay!.deliveredPackageCount}',
+                  ),
+                ],
+                const SizedBox(height: 10),
+                _TodayInfoRow(
+                  label: 'Unterstützung',
+                  value: '$supportPackages Pakete',
+                ),
+                const SizedBox(height: 10),
+                _TodayInfoRow(
+                  label: 'Gesamt zugestellt',
+                  value: '$totalDelivered Pakete',
+                  emphasize: true,
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  static String _assignmentTitle(WorkDay workDay) {
+    if (workDay.assignmentType ==
+        WorkAssignmentType.packageDriver) {
+      return 'Paketfahrer / Unterstützung';
+    }
+
+    if (workDay.districtId == null) {
+      return 'Eigener Bezirk';
+    }
+
+    return 'Bezirk ${workDay.districtId}';
+  }
+
+  static String _assignmentSubtitle(WorkDay workDay) {
+    if (workDay.assignmentType ==
+        WorkAssignmentType.packageDriver) {
+      return 'Zusätzliche Unterstützung';
+    }
+
+    return _districtPartLabel(
+      workDay.districtPart,
+    );
+  }
+
+  static String _districtPartLabel(DistrictPart part) {
+    switch (part) {
+      case DistrictPart.full:
+        return 'Ganzer Bezirk';
+      case DistrictPart.partA:
+        return 'A-Teil';
+      case DistrictPart.partB:
+        return 'B-Teil';
+    }
+  }
+
+  static IconData _workDayTypeIcon(WorkDayType type) {
+    switch (type) {
+      case WorkDayType.work:
+        return Icons.work_outline;
+      case WorkDayType.free:
+        return Icons.weekend_outlined;
+      case WorkDayType.vacation:
+        return Icons.beach_access_outlined;
+      case WorkDayType.holiday:
+        return Icons.celebration_outlined;
+      case WorkDayType.sick:
+        return Icons.sick_outlined;
+    }
+  }
+
+  static String _workDayTypeLabel(WorkDayType type) {
+    switch (type) {
+      case WorkDayType.work:
+        return 'Arbeit';
+      case WorkDayType.free:
+        return 'Frei';
+      case WorkDayType.vacation:
+        return 'Urlaub';
+      case WorkDayType.holiday:
+        return 'Feiertag';
+      case WorkDayType.sick:
+        return 'Krank';
+    }
+  }
+}
+
+class _TodaySupportSummaryCard extends ConsumerWidget {
+  const _TodaySupportSummaryCard({
+    required this.workDay,
+  });
+
+  final WorkDay? workDay;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    if (workDay == null ||
+        workDay!.type != WorkDayType.work) {
+      return const _SummaryCard(
+        title: 'Unterstützung',
+        value: '0',
+        subtitle: 'Pakete heute',
+        icon: Icons.group_outlined,
+      );
+    }
+
+    return FutureBuilder<int>(
+      future: ref
+          .read(workDayProvider.notifier)
+          .getTotalSupportPackages(
+            workDay!.id,
+          ),
+      builder: (context, snapshot) {
+        return _SummaryCard(
+          title: 'Unterstützung',
+          value: '${snapshot.data ?? 0}',
+          subtitle: 'Pakete heute',
+          icon: Icons.group_outlined,
+        );
+      },
+    );
+  }
+}
+
+class _TodayHeader extends StatelessWidget {
+  const _TodayHeader({
+    required this.icon,
+    required this.title,
+  });
+
+  final IconData icon;
+  final String title;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Icon(
+          icon,
+          color: Theme.of(context).colorScheme.primary,
+        ),
+        const SizedBox(width: 10),
+        Text(
+          title,
+          style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                fontWeight: FontWeight.bold,
+              ),
+        ),
+      ],
+    );
+  }
+}
+
+class _TodayInfoRow extends StatelessWidget {
+  const _TodayInfoRow({
+    required this.label,
+    required this.value,
+    this.emphasize = false,
+  });
+
+  final String label;
+  final String value;
+  final bool emphasize;
+
+  @override
+  Widget build(BuildContext context) {
+    final style = emphasize
+        ? Theme.of(context).textTheme.titleMedium?.copyWith(
+              fontWeight: FontWeight.bold,
+            )
+        : Theme.of(context).textTheme.bodyLarge;
+
+    return Row(
+      children: [
+        Expanded(
+          child: Text(
+            label,
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  color: Theme.of(context)
+                      .colorScheme
+                      .onSurfaceVariant,
+                ),
+          ),
+        ),
+        Text(
+          value,
+          style: style,
+        ),
+      ],
     );
   }
 }
@@ -360,27 +778,34 @@ class _MorePage extends StatelessWidget {
                   onTap: () {
                     Navigator.of(context).push(
                       MaterialPageRoute<void>(
-                        builder: (context) => const DistrictsPage(),
+                        builder: (context) =>
+                            const DistrictsPage(),
                       ),
                     );
                   },
                 ),
                 const Divider(height: 1),
                 ListTile(
-                  leading: const Icon(Icons.campaign_outlined),
+                  leading:
+                      const Icon(Icons.campaign_outlined),
                   title: const Text('Werbung'),
-                  subtitle: const Text('Gespeicherte Werbungen verwalten'),
-                  trailing: const Icon(Icons.chevron_right),
+                  subtitle: const Text(
+                    'Gespeicherte Werbungen verwalten',
+                  ),
+                  trailing:
+                      const Icon(Icons.chevron_right),
                   onTap: () {},
                 ),
                 const Divider(height: 1),
                 ListTile(
-                  leading: const Icon(Icons.settings_outlined),
+                  leading:
+                      const Icon(Icons.settings_outlined),
                   title: const Text('Einstellungen'),
                   subtitle: const Text(
                     'Arbeitszeiten und App-Einstellungen',
                   ),
-                  trailing: const Icon(Icons.chevron_right),
+                  trailing:
+                      const Icon(Icons.chevron_right),
                   onTap: () {},
                 ),
               ],
@@ -414,13 +839,17 @@ class _PlaceholderContent extends StatelessWidget {
             Icon(
               icon,
               size: 64,
-              color: Theme.of(context).colorScheme.primary,
+              color:
+                  Theme.of(context).colorScheme.primary,
             ),
             const SizedBox(height: 20),
             Text(
               title,
               textAlign: TextAlign.center,
-              style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+              style: Theme.of(context)
+                  .textTheme
+                  .headlineSmall
+                  ?.copyWith(
                     fontWeight: FontWeight.bold,
                   ),
             ),
@@ -428,11 +857,38 @@ class _PlaceholderContent extends StatelessWidget {
             Text(
               description,
               textAlign: TextAlign.center,
-              style: Theme.of(context).textTheme.bodyLarge,
+              style:
+                  Theme.of(context).textTheme.bodyLarge,
             ),
           ],
         ),
       ),
     );
   }
+}
+
+String _formatDuration(int minutes) {
+  final hours = minutes ~/ 60;
+  final remainingMinutes = minutes % 60;
+
+  return '$hours h ${remainingMinutes.toString().padLeft(2, '0')} min';
+}
+
+String _formatTimeRange(
+  int? startMinutes,
+  int? endMinutes,
+) {
+  if (startMinutes == null || endMinutes == null) {
+    return '–';
+  }
+
+  return '${_formatTime(startMinutes)} – ${_formatTime(endMinutes)}';
+}
+
+String _formatTime(int minutes) {
+  final hours = minutes ~/ 60;
+  final remainingMinutes = minutes % 60;
+
+  return '${hours.toString().padLeft(2, '0')}:'
+      '${remainingMinutes.toString().padLeft(2, '0')}';
 }

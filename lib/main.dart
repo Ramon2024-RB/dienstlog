@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'models/own_tour_entry.dart';
 import 'models/work_day.dart';
 import 'screens/calendar/calendar_page.dart';
 import 'screens/districts/districts_page.dart';
@@ -57,10 +58,12 @@ class MainNavigationPage extends StatefulWidget {
   const MainNavigationPage({super.key});
 
   @override
-  State<MainNavigationPage> createState() => _MainNavigationPageState();
+  State<MainNavigationPage> createState() =>
+      _MainNavigationPageState();
 }
 
-class _MainNavigationPageState extends State<MainNavigationPage> {
+class _MainNavigationPageState
+    extends State<MainNavigationPage> {
   int _selectedIndex = 0;
 
   static const List<Widget> _pages = [
@@ -85,26 +88,43 @@ class _MainNavigationPageState extends State<MainNavigationPage> {
       ),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _selectedIndex,
-        onDestinationSelected: _onDestinationSelected,
+        onDestinationSelected:
+            _onDestinationSelected,
         destinations: const [
           NavigationDestination(
-            icon: Icon(Icons.home_outlined),
-            selectedIcon: Icon(Icons.home),
+            icon: Icon(
+              Icons.home_outlined,
+            ),
+            selectedIcon: Icon(
+              Icons.home,
+            ),
             label: 'Übersicht',
           ),
           NavigationDestination(
-            icon: Icon(Icons.calendar_month_outlined),
-            selectedIcon: Icon(Icons.calendar_month),
+            icon: Icon(
+              Icons.calendar_month_outlined,
+            ),
+            selectedIcon: Icon(
+              Icons.calendar_month,
+            ),
             label: 'Kalender',
           ),
           NavigationDestination(
-            icon: Icon(Icons.bar_chart_outlined),
-            selectedIcon: Icon(Icons.bar_chart),
+            icon: Icon(
+              Icons.bar_chart_outlined,
+            ),
+            selectedIcon: Icon(
+              Icons.bar_chart,
+            ),
             label: 'Statistik',
           ),
           NavigationDestination(
-            icon: Icon(Icons.more_horiz),
-            selectedIcon: Icon(Icons.more_horiz),
+            icon: Icon(
+              Icons.more_horiz,
+            ),
+            selectedIcon: Icon(
+              Icons.more_horiz,
+            ),
             label: 'Mehr',
           ),
         ],
@@ -117,8 +137,12 @@ class _OverviewPage extends ConsumerWidget {
   const _OverviewPage();
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final workDaysAsync = ref.watch(workDayProvider);
+  Widget build(
+    BuildContext context,
+    WidgetRef ref,
+  ) {
+    final workDaysAsync =
+        ref.watch(workDayProvider);
 
     return Scaffold(
       appBar: AppBar(
@@ -132,32 +156,48 @@ class _OverviewPage extends ConsumerWidget {
       body: workDaysAsync.when(
         loading: () {
           return const Center(
-            child: CircularProgressIndicator(),
+            child:
+                CircularProgressIndicator(),
           );
         },
         error: (error, stackTrace) {
           return Center(
             child: Padding(
-              padding: const EdgeInsets.all(24),
+              padding:
+                  const EdgeInsets.all(
+                24,
+              ),
               child: Column(
-                mainAxisSize: MainAxisSize.min,
+                mainAxisSize:
+                    MainAxisSize.min,
                 children: [
                   const Icon(
                     Icons.error_outline,
                     size: 48,
                   ),
-                  const SizedBox(height: 16),
+                  const SizedBox(
+                    height: 16,
+                  ),
                   const Text(
                     'Die Arbeitsdaten konnten nicht geladen werden.',
-                    textAlign: TextAlign.center,
+                    textAlign:
+                        TextAlign.center,
                   ),
-                  const SizedBox(height: 16),
+                  const SizedBox(
+                    height: 16,
+                  ),
                   FilledButton.icon(
                     onPressed: () {
-                      ref.invalidate(workDayProvider);
+                      ref.invalidate(
+                        workDayProvider,
+                      );
                     },
-                    icon: const Icon(Icons.refresh),
-                    label: const Text('Erneut versuchen'),
+                    icon: const Icon(
+                      Icons.refresh,
+                    ),
+                    label: const Text(
+                      'Erneut versuchen',
+                    ),
                   ),
                 ],
               ),
@@ -174,7 +214,8 @@ class _OverviewPage extends ConsumerWidget {
   }
 }
 
-class _OverviewContent extends ConsumerWidget {
+class _OverviewContent
+    extends ConsumerWidget {
   const _OverviewContent({
     required this.workDays,
   });
@@ -182,7 +223,10 @@ class _OverviewContent extends ConsumerWidget {
   final List<WorkDay> workDays;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(
+    BuildContext context,
+    WidgetRef ref,
+  ) {
     final now = DateTime.now();
 
     final today = DateTime(
@@ -191,51 +235,73 @@ class _OverviewContent extends ConsumerWidget {
       now.day,
     );
 
-    final todayWorkDay = _findWorkDayForDate(
+    final todayWorkDay =
+        _findWorkDayForDate(
       workDays,
       today,
     );
 
-    final weekStart = today.subtract(
+    final weekStart =
+        today.subtract(
       Duration(
-        days: today.weekday - DateTime.monday,
+        days:
+            today.weekday -
+                DateTime.monday,
       ),
     );
 
-    final weekEnd = weekStart.add(
-      const Duration(days: 6),
+    final weekEnd =
+        weekStart.add(
+      const Duration(
+        days: 6,
+      ),
     );
 
-    final weekWorkDays = workDays.where((workDay) {
-      final date = _normalizeDate(workDay.date);
+    final weekWorkDays =
+        workDays.where(
+      (workDay) {
+        final date =
+            _normalizeDate(
+          workDay.date,
+        );
 
-      return !date.isBefore(weekStart) &&
-          !date.isAfter(weekEnd) &&
-          workDay.type == WorkDayType.work;
-    }).toList();
-
-    final monthWorkDays = workDays.where((workDay) {
-      return workDay.date.year == today.year &&
-          workDay.date.month == today.month &&
-          workDay.type == WorkDayType.work;
-    }).toList();
-
-    final weeklyWorkMinutes = weekWorkDays.fold<int>(
-      0,
-      (sum, workDay) {
-        return sum + (workDay.workDurationMinutes ?? 0);
+        return !date.isBefore(
+              weekStart,
+            ) &&
+            !date.isAfter(
+              weekEnd,
+            ) &&
+            workDay.type ==
+                WorkDayType.work;
       },
-    );
+    ).toList();
 
-    final weeklyDeliveredPackages = weekWorkDays.fold<int>(
+    final monthWorkDays =
+        workDays.where(
+      (workDay) {
+        return workDay.date.year ==
+                today.year &&
+            workDay.date.month ==
+                today.month &&
+            workDay.type ==
+                WorkDayType.work;
+      },
+    ).toList();
+
+    final weeklyWorkMinutes =
+        weekWorkDays.fold<int>(
       0,
       (sum, workDay) {
-        return sum + workDay.deliveredPackageCount;
+        return sum +
+            (workDay
+                    .workDurationMinutes ??
+                0);
       },
     );
 
     return ListView(
-      padding: const EdgeInsets.fromLTRB(
+      padding:
+          const EdgeInsets.fromLTRB(
         20,
         16,
         20,
@@ -244,59 +310,93 @@ class _OverviewContent extends ConsumerWidget {
       children: [
         Text(
           'Übersicht',
-          style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                fontWeight: FontWeight.bold,
+          style: Theme.of(context)
+              .textTheme
+              .headlineMedium
+              ?.copyWith(
+                fontWeight:
+                    FontWeight.bold,
               ),
         ),
-        const SizedBox(height: 8),
+        const SizedBox(
+          height: 8,
+        ),
         Text(
           'Dein heutiger Arbeitstag auf einen Blick.',
-          style: Theme.of(context).textTheme.bodyLarge,
+          style: Theme.of(context)
+              .textTheme
+              .bodyLarge,
         ),
-        const SizedBox(height: 24),
+        const SizedBox(
+          height: 24,
+        ),
+
         _TodayCard(
           workDay: todayWorkDay,
         ),
-        const SizedBox(height: 16),
+
+        const SizedBox(
+          height: 16,
+        ),
+
         Row(
           children: [
             Expanded(
               child: _SummaryCard(
                 title: 'Diese Woche',
-                value: _formatDuration(
+                value:
+                    _formatDuration(
                   weeklyWorkMinutes,
                 ),
-                subtitle: 'Arbeitszeit',
-                icon: Icons.access_time,
+                subtitle:
+                    'Arbeitszeit',
+                icon:
+                    Icons.access_time,
               ),
             ),
-            const SizedBox(width: 12),
+            const SizedBox(
+              width: 12,
+            ),
             Expanded(
-              child: _SummaryCard(
-                title: 'Pakete',
-                value: '$weeklyDeliveredPackages',
-                subtitle: 'eigene ausgeliefert',
-                icon: Icons.inventory_2_outlined,
+              child:
+                  _WeeklyOwnPackagesSummaryCard(
+                startDate:
+                    weekStart,
+                endDate:
+                    weekEnd,
               ),
             ),
           ],
         ),
-        const SizedBox(height: 12),
+
+        const SizedBox(
+          height: 12,
+        ),
+
         Row(
           children: [
             Expanded(
-              child: _WeeklySupportSummaryCard(
-                startDate: weekStart,
-                endDate: weekEnd,
+              child:
+                  _WeeklySupportSummaryCard(
+                startDate:
+                    weekStart,
+                endDate:
+                    weekEnd,
               ),
             ),
-            const SizedBox(width: 12),
+            const SizedBox(
+              width: 12,
+            ),
             Expanded(
               child: _SummaryCard(
-                title: 'Dieser Monat',
-                value: '${monthWorkDays.length}',
-                subtitle: 'Arbeitstage',
-                icon: Icons.calendar_today_outlined,
+                title:
+                    'Dieser Monat',
+                value:
+                    '${monthWorkDays.length}',
+                subtitle:
+                    'Arbeitstage',
+                icon: Icons
+                    .calendar_today_outlined,
               ),
             ),
           ],
@@ -305,11 +405,13 @@ class _OverviewContent extends ConsumerWidget {
     );
   }
 
-  static WorkDay? _findWorkDayForDate(
+  static WorkDay?
+      _findWorkDayForDate(
     List<WorkDay> workDays,
     DateTime date,
   ) {
-    for (final workDay in workDays) {
+    for (final workDay
+        in workDays) {
       if (_isSameDate(
         workDay.date,
         date,
@@ -325,9 +427,12 @@ class _OverviewContent extends ConsumerWidget {
     DateTime first,
     DateTime second,
   ) {
-    return first.year == second.year &&
-        first.month == second.month &&
-        first.day == second.day;
+    return first.year ==
+            second.year &&
+        first.month ==
+            second.month &&
+        first.day ==
+            second.day;
   }
 
   static DateTime _normalizeDate(
@@ -341,7 +446,8 @@ class _OverviewContent extends ConsumerWidget {
   }
 }
 
-class _TodayCard extends ConsumerWidget {
+class _TodayCard
+    extends ConsumerWidget {
   const _TodayCard({
     required this.workDay,
   });
@@ -356,33 +462,53 @@ class _TodayCard extends ConsumerWidget {
     if (workDay == null) {
       return Card(
         child: Padding(
-          padding: const EdgeInsets.all(20),
+          padding:
+              const EdgeInsets.all(
+            20,
+          ),
           child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+            crossAxisAlignment:
+                CrossAxisAlignment.start,
             children: [
               const _TodayHeader(
-                icon: Icons.today_outlined,
+                icon:
+                    Icons.today_outlined,
                 title: 'Heute',
               ),
-              const SizedBox(height: 20),
+              const SizedBox(
+                height: 20,
+              ),
               Text(
                 'Noch kein Arbeitstag eingetragen.',
-                style: Theme.of(context).textTheme.bodyLarge,
+                style:
+                    Theme.of(context)
+                        .textTheme
+                        .bodyLarge,
               ),
-              const SizedBox(height: 16),
+              const SizedBox(
+                height: 16,
+              ),
               FilledButton.icon(
                 onPressed: () async {
-                  await Navigator.of(context).push<bool>(
-                    MaterialPageRoute<bool>(
-                      builder: (context) {
+                  await Navigator.of(
+                    context,
+                  ).push<bool>(
+                    MaterialPageRoute<
+                        bool>(
+                      builder:
+                          (context) {
                         return AddWorkDayPage(
-                          initialDate: DateTime.now(),
+                          initialDate:
+                              DateTime
+                                  .now(),
                         );
                       },
                     ),
                   );
                 },
-                icon: const Icon(Icons.add),
+                icon: const Icon(
+                  Icons.add,
+                ),
                 label: const Text(
                   'Arbeitstag eintragen',
                 ),
@@ -393,30 +519,41 @@ class _TodayCard extends ConsumerWidget {
       );
     }
 
-    if (workDay!.type != WorkDayType.work) {
+    if (workDay!.type !=
+        WorkDayType.work) {
       return Card(
         child: Padding(
-          padding: const EdgeInsets.all(20),
+          padding:
+              const EdgeInsets.all(
+            20,
+          ),
           child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+            crossAxisAlignment:
+                CrossAxisAlignment.start,
             children: [
               _TodayHeader(
-                icon: _workDayTypeIcon(
+                icon:
+                    _workDayTypeIcon(
                   workDay!.type,
                 ),
                 title: 'Heute',
               ),
-              const SizedBox(height: 20),
+              const SizedBox(
+                height: 20,
+              ),
               Text(
                 _workDayTypeLabel(
                   workDay!.type,
                 ),
-                style: Theme.of(context)
-                    .textTheme
-                    .headlineSmall
-                    ?.copyWith(
-                      fontWeight: FontWeight.bold,
-                    ),
+                style:
+                    Theme.of(context)
+                        .textTheme
+                        .headlineSmall
+                        ?.copyWith(
+                          fontWeight:
+                              FontWeight
+                                  .bold,
+                        ),
               ),
             ],
           ),
@@ -424,94 +561,207 @@ class _TodayCard extends ConsumerWidget {
       );
     }
 
-    return FutureBuilder<int>(
-      future: ref
-          .read(workDayProvider.notifier)
-          .getTotalSupportPackages(
-            workDay!.id,
-          ),
-      builder: (context, snapshot) {
+    return FutureBuilder<
+        _TodayWorkData>(
+      future: _loadTodayWorkData(
+        ref,
+        workDay!,
+      ),
+      builder: (
+        context,
+        snapshot,
+      ) {
+        if (snapshot.hasError) {
+          return Card(
+            child: Padding(
+              padding:
+                  const EdgeInsets.all(
+                20,
+              ),
+              child: Column(
+                crossAxisAlignment:
+                    CrossAxisAlignment
+                        .start,
+                children: [
+                  const _TodayHeader(
+                    icon: Icons
+                        .today_outlined,
+                    title: 'Heute',
+                  ),
+                  const SizedBox(
+                    height: 20,
+                  ),
+                  Text(
+                    'Die Tagesdetails konnten nicht vollständig geladen werden.',
+                    style:
+                        Theme.of(
+                      context,
+                    )
+                            .textTheme
+                            .bodyLarge,
+                  ),
+                ],
+              ),
+            ),
+          );
+        }
+
+        final data =
+            snapshot.data;
+
+        final ownTours =
+            data?.ownTours ??
+                const <
+                    OwnTourEntry>[];
+
         final supportPackages =
-            snapshot.data ?? 0;
+            data?.supportPackages ??
+                0;
+
+        final ownPackages =
+            data?.ownPackages ??
+                workDay!
+                    .deliveredPackageCount;
 
         final totalDelivered =
-            workDay!.deliveredPackageCount +
+            ownPackages +
                 supportPackages;
 
         return Card(
           child: Padding(
-            padding: const EdgeInsets.all(20),
+            padding:
+                const EdgeInsets.all(
+              20,
+            ),
             child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+              crossAxisAlignment:
+                  CrossAxisAlignment
+                      .start,
               children: [
                 const _TodayHeader(
-                  icon: Icons.today_outlined,
+                  icon: Icons
+                      .today_outlined,
                   title: 'Heute',
                 ),
-                const SizedBox(height: 20),
+
+                const SizedBox(
+                  height: 20,
+                ),
+
                 Text(
                   _assignmentTitle(
                     workDay!,
+                    ownTours,
                   ),
-                  style: Theme.of(context)
-                      .textTheme
-                      .titleLarge
-                      ?.copyWith(
-                        fontWeight: FontWeight.bold,
-                      ),
+                  style:
+                      Theme.of(context)
+                          .textTheme
+                          .titleLarge
+                          ?.copyWith(
+                            fontWeight:
+                                FontWeight
+                                    .bold,
+                          ),
                 ),
-                const SizedBox(height: 6),
+
+                const SizedBox(
+                  height: 6,
+                ),
+
                 Text(
                   _assignmentSubtitle(
                     workDay!,
+                    ownTours,
                   ),
-                  style: Theme.of(context)
-                      .textTheme
-                      .bodyMedium
-                      ?.copyWith(
-                        color: Theme.of(context)
-                            .colorScheme
-                            .onSurfaceVariant,
-                      ),
+                  style:
+                      Theme.of(context)
+                          .textTheme
+                          .bodyMedium
+                          ?.copyWith(
+                            color: Theme.of(
+                              context,
+                            )
+                                .colorScheme
+                                .onSurfaceVariant,
+                          ),
                 ),
-                const SizedBox(height: 20),
+
+                const SizedBox(
+                  height: 20,
+                ),
+
                 _TodayInfoRow(
-                  label: 'Arbeitszeit',
-                  value:
-                      workDay!.workDurationMinutes ==
-                              null
-                          ? '–'
-                          : _formatDuration(
-                              workDay!
-                                  .workDurationMinutes!,
-                            ),
+                  label:
+                      'Arbeitszeit',
+                  value: workDay!
+                              .workDurationMinutes ==
+                          null
+                      ? '–'
+                      : _formatDuration(
+                          workDay!
+                              .workDurationMinutes!,
+                        ),
                 ),
-                const SizedBox(height: 10),
+
+                const SizedBox(
+                  height: 10,
+                ),
+
                 _TodayInfoRow(
                   label: 'Zeitraum',
-                  value: _formatTimeRange(
-                    workDay!.workStart,
-                    workDay!.workEnd,
+                  value:
+                      _formatTimeRange(
+                    workDay!
+                        .workStart,
+                    workDay!
+                        .workEnd,
                   ),
                 ),
-                if (workDay!.assignmentType ==
-                    WorkAssignmentType.ownDistrict) ...[
-                  const SizedBox(height: 10),
+
+                if (workDay!
+                        .assignmentType ==
+                    WorkAssignmentType
+                        .ownDistrict) ...[
+                  const SizedBox(
+                    height: 10,
+                  ),
                   _TodayInfoRow(
-                    label: 'Eigene Pakete',
+                    label:
+                        'Gefahrene Bezirke',
                     value:
-                        '${workDay!.deliveredPackageCount}',
+                        _districtCountLabel(
+                      ownTours,
+                    ),
+                  ),
+                  const SizedBox(
+                    height: 10,
+                  ),
+                  _TodayInfoRow(
+                    label:
+                        'Eigene Pakete',
+                    value:
+                        '$ownPackages Pakete',
                   ),
                 ],
-                const SizedBox(height: 10),
+
+                const SizedBox(
+                  height: 10,
+                ),
+
                 _TodayInfoRow(
-                  label: 'Unterstützung',
+                  label:
+                      'Unterstützung',
                   value:
                       '$supportPackages Pakete',
                 ),
-                const SizedBox(height: 10),
+
+                const SizedBox(
+                  height: 10,
+                ),
+
                 _TodayInfoRow(
-                  label: 'Gesamt zugestellt',
+                  label:
+                      'Gesamt zugestellt',
                   value:
                       '$totalDelivered Pakete',
                   emphasize: true,
@@ -524,32 +774,125 @@ class _TodayCard extends ConsumerWidget {
     );
   }
 
+  Future<_TodayWorkData>
+      _loadTodayWorkData(
+    WidgetRef ref,
+    WorkDay workDay,
+  ) async {
+    final notifier =
+        ref.read(
+      workDayProvider.notifier,
+    );
+
+    final ownToursFuture =
+        notifier.getOwnTourEntries(
+      workDay.id,
+    );
+
+    final ownPackagesFuture =
+        notifier
+            .getTotalOwnTourPackages(
+      workDay.id,
+    );
+
+    final supportPackagesFuture =
+        notifier
+            .getTotalSupportPackages(
+      workDay.id,
+    );
+
+    final ownTours =
+        await ownToursFuture;
+
+    final ownPackages =
+        await ownPackagesFuture;
+
+    final supportPackages =
+        await supportPackagesFuture;
+
+    return _TodayWorkData(
+      ownTours: ownTours,
+      ownPackages:
+          ownPackages,
+      supportPackages:
+          supportPackages,
+    );
+  }
+
   static String _assignmentTitle(
     WorkDay workDay,
+    List<OwnTourEntry> ownTours,
   ) {
     if (workDay.assignmentType ==
-        WorkAssignmentType.packageDriver) {
+        WorkAssignmentType
+            .packageDriver) {
       return 'Paketfahrer / Unterstützung';
     }
 
-    if (workDay.districtId == null) {
-      return 'Eigener Bezirk';
+    if (ownTours.isEmpty) {
+      if (workDay.districtId ==
+          null) {
+        return 'Eigene Zustellung';
+      }
+
+      return 'Bezirk ${workDay.districtId}';
     }
 
-    return 'Bezirk ${workDay.districtId}';
+    if (ownTours.length == 1) {
+      return 'Bezirk ${ownTours.first.district}';
+    }
+
+    final districts =
+        ownTours
+            .map(
+              (entry) =>
+                  entry.district,
+            )
+            .join(' + ');
+
+    return 'Bezirke $districts';
   }
 
-  static String _assignmentSubtitle(
+  static String
+      _assignmentSubtitle(
     WorkDay workDay,
+    List<OwnTourEntry> ownTours,
   ) {
     if (workDay.assignmentType ==
-        WorkAssignmentType.packageDriver) {
+        WorkAssignmentType
+            .packageDriver) {
       return 'Zusätzliche Unterstützung';
+    }
+
+    if (ownTours.length == 1) {
+      return _districtPartLabel(
+        ownTours.first
+            .districtPart,
+      );
+    }
+
+    if (ownTours.length > 1) {
+      return '${ownTours.length} Bezirke selbst gefahren';
     }
 
     return _districtPartLabel(
       workDay.districtPart,
     );
+  }
+
+  static String
+      _districtCountLabel(
+    List<OwnTourEntry> ownTours,
+  ) {
+    if (ownTours.isEmpty) {
+      return '–';
+    }
+
+    if (ownTours.length == 1) {
+      return '1';
+    }
+
+    return '${ownTours.length}';
   }
 
   static String _districtPartLabel(
@@ -567,7 +910,8 @@ class _TodayCard extends ConsumerWidget {
     }
   }
 
-  static IconData _workDayTypeIcon(
+  static IconData
+      _workDayTypeIcon(
     WorkDayType type,
   ) {
     switch (type) {
@@ -578,17 +922,20 @@ class _TodayCard extends ConsumerWidget {
         return Icons.weekend_outlined;
 
       case WorkDayType.vacation:
-        return Icons.beach_access_outlined;
+        return Icons
+            .beach_access_outlined;
 
       case WorkDayType.holiday:
-        return Icons.celebration_outlined;
+        return Icons
+            .celebration_outlined;
 
       case WorkDayType.sick:
         return Icons.sick_outlined;
     }
   }
 
-  static String _workDayTypeLabel(
+  static String
+      _workDayTypeLabel(
     WorkDayType type,
   ) {
     switch (type) {
@@ -610,7 +957,77 @@ class _TodayCard extends ConsumerWidget {
   }
 }
 
-class _WeeklySupportSummaryCard extends ConsumerWidget {
+class _TodayWorkData {
+  const _TodayWorkData({
+    required this.ownTours,
+    required this.ownPackages,
+    required this.supportPackages,
+  });
+
+  final List<OwnTourEntry>
+      ownTours;
+
+  final int ownPackages;
+
+  final int supportPackages;
+}
+
+class _WeeklyOwnPackagesSummaryCard
+    extends ConsumerWidget {
+  const _WeeklyOwnPackagesSummaryCard({
+    required this.startDate,
+    required this.endDate,
+  });
+
+  final DateTime startDate;
+  final DateTime endDate;
+
+  @override
+  Widget build(
+    BuildContext context,
+    WidgetRef ref,
+  ) {
+    return FutureBuilder<int>(
+      future: ref
+          .read(
+            workDayProvider
+                .notifier,
+          )
+          .getTotalOwnTourPackagesForDateRange(
+            startDate,
+            endDate,
+          ),
+      builder: (
+        context,
+        snapshot,
+      ) {
+        if (snapshot.hasError) {
+          return const _SummaryCard(
+            title: 'Pakete',
+            value: '–',
+            subtitle:
+                'eigene diese Woche',
+            icon: Icons
+                .inventory_2_outlined,
+          );
+        }
+
+        return _SummaryCard(
+          title: 'Pakete',
+          value:
+              '${snapshot.data ?? 0}',
+          subtitle:
+              'eigene diese Woche',
+          icon: Icons
+              .inventory_2_outlined,
+        );
+      },
+    );
+  }
+}
+
+class _WeeklySupportSummaryCard
+    extends ConsumerWidget {
   const _WeeklySupportSummaryCard({
     required this.startDate,
     required this.endDate,
@@ -626,33 +1043,46 @@ class _WeeklySupportSummaryCard extends ConsumerWidget {
   ) {
     return FutureBuilder<int>(
       future: ref
-          .read(workDayProvider.notifier)
+          .read(
+            workDayProvider
+                .notifier,
+          )
           .getTotalSupportPackagesForDateRange(
             startDate,
             endDate,
           ),
-      builder: (context, snapshot) {
+      builder: (
+        context,
+        snapshot,
+      ) {
         if (snapshot.hasError) {
           return const _SummaryCard(
-            title: 'Unterstützung',
+            title:
+                'Unterstützung',
             value: '–',
-            subtitle: 'Pakete diese Woche',
-            icon: Icons.group_outlined,
+            subtitle:
+                'Pakete diese Woche',
+            icon:
+                Icons.group_outlined,
           );
         }
 
         return _SummaryCard(
           title: 'Unterstützung',
-          value: '${snapshot.data ?? 0}',
-          subtitle: 'Pakete diese Woche',
-          icon: Icons.group_outlined,
+          value:
+              '${snapshot.data ?? 0}',
+          subtitle:
+              'Pakete diese Woche',
+          icon:
+              Icons.group_outlined,
         );
       },
     );
   }
 }
 
-class _TodayHeader extends StatelessWidget {
+class _TodayHeader
+    extends StatelessWidget {
   const _TodayHeader({
     required this.icon,
     required this.title,
@@ -669,26 +1099,33 @@ class _TodayHeader extends StatelessWidget {
       children: [
         Icon(
           icon,
-          color: Theme.of(context)
-              .colorScheme
-              .primary,
+          color:
+              Theme.of(context)
+                  .colorScheme
+                  .primary,
         ),
-        const SizedBox(width: 10),
+        const SizedBox(
+          width: 10,
+        ),
         Text(
           title,
-          style: Theme.of(context)
-              .textTheme
-              .titleLarge
-              ?.copyWith(
-                fontWeight: FontWeight.bold,
-              ),
+          style:
+              Theme.of(context)
+                  .textTheme
+                  .titleLarge
+                  ?.copyWith(
+                    fontWeight:
+                        FontWeight
+                            .bold,
+                  ),
         ),
       ],
     );
   }
 }
 
-class _TodayInfoRow extends StatelessWidget {
+class _TodayInfoRow
+    extends StatelessWidget {
   const _TodayInfoRow({
     required this.label,
     required this.value,
@@ -703,30 +1140,35 @@ class _TodayInfoRow extends StatelessWidget {
   Widget build(
     BuildContext context,
   ) {
-    final style = emphasize
-        ? Theme.of(context)
-            .textTheme
-            .titleMedium
-            ?.copyWith(
-              fontWeight: FontWeight.bold,
-            )
-        : Theme.of(context)
-            .textTheme
-            .bodyLarge;
+    final style =
+        emphasize
+            ? Theme.of(context)
+                .textTheme
+                .titleMedium
+                ?.copyWith(
+                  fontWeight:
+                      FontWeight.bold,
+                )
+            : Theme.of(context)
+                .textTheme
+                .bodyLarge;
 
     return Row(
       children: [
         Expanded(
           child: Text(
             label,
-            style: Theme.of(context)
-                .textTheme
-                .bodyMedium
-                ?.copyWith(
-                  color: Theme.of(context)
-                      .colorScheme
-                      .onSurfaceVariant,
-                ),
+            style:
+                Theme.of(context)
+                    .textTheme
+                    .bodyMedium
+                    ?.copyWith(
+                      color: Theme.of(
+                        context,
+                      )
+                          .colorScheme
+                          .onSurfaceVariant,
+                    ),
           ),
         ),
         Text(
@@ -738,7 +1180,8 @@ class _TodayInfoRow extends StatelessWidget {
   }
 }
 
-class _SummaryCard extends StatelessWidget {
+class _SummaryCard
+    extends StatelessWidget {
   const _SummaryCard({
     required this.title,
     required this.value,
@@ -757,47 +1200,63 @@ class _SummaryCard extends StatelessWidget {
   ) {
     return Card(
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding:
+            const EdgeInsets.all(
+          16,
+        ),
         child: Column(
           crossAxisAlignment:
               CrossAxisAlignment.start,
           children: [
             Icon(
               icon,
-              color: Theme.of(context)
-                  .colorScheme
-                  .primary,
+              color:
+                  Theme.of(context)
+                      .colorScheme
+                      .primary,
             ),
-            const SizedBox(height: 16),
+            const SizedBox(
+              height: 16,
+            ),
             Text(
               title,
               maxLines: 1,
               overflow:
-                  TextOverflow.ellipsis,
-              style: Theme.of(context)
-                  .textTheme
-                  .labelLarge,
+                  TextOverflow
+                      .ellipsis,
+              style:
+                  Theme.of(context)
+                      .textTheme
+                      .labelLarge,
             ),
-            const SizedBox(height: 4),
+            const SizedBox(
+              height: 4,
+            ),
             Text(
               value,
-              style: Theme.of(context)
-                  .textTheme
-                  .titleLarge
-                  ?.copyWith(
-                    fontWeight:
-                        FontWeight.bold,
-                  ),
+              style:
+                  Theme.of(context)
+                      .textTheme
+                      .titleLarge
+                      ?.copyWith(
+                        fontWeight:
+                            FontWeight
+                                .bold,
+                      ),
             ),
-            const SizedBox(height: 2),
+            const SizedBox(
+              height: 2,
+            ),
             Text(
               subtitle,
               maxLines: 2,
               overflow:
-                  TextOverflow.ellipsis,
-              style: Theme.of(context)
-                  .textTheme
-                  .bodySmall,
+                  TextOverflow
+                      .ellipsis,
+              style:
+                  Theme.of(context)
+                      .textTheme
+                      .bodySmall,
             ),
           ],
         ),
@@ -806,7 +1265,8 @@ class _SummaryCard extends StatelessWidget {
   }
 }
 
-class _StatisticsPage extends StatelessWidget {
+class _StatisticsPage
+    extends StatelessWidget {
   const _StatisticsPage();
 
   @override
@@ -818,12 +1278,15 @@ class _StatisticsPage extends StatelessWidget {
         title: const Text(
           'Statistik',
           style: TextStyle(
-            fontWeight: FontWeight.bold,
+            fontWeight:
+                FontWeight.bold,
           ),
         ),
       ),
-      body: const _PlaceholderContent(
-        icon: Icons.bar_chart_outlined,
+      body:
+          const _PlaceholderContent(
+        icon:
+            Icons.bar_chart_outlined,
         title: 'Statistik',
         description:
             'Hier werden später Arbeitszeit, Zustellzeit, Pakete, Bezirke und deine Unterstützungen ausgewertet.',
@@ -832,7 +1295,8 @@ class _StatisticsPage extends StatelessWidget {
   }
 }
 
-class _MorePage extends StatelessWidget {
+class _MorePage
+    extends StatelessWidget {
   const _MorePage();
 
   @override
@@ -844,12 +1308,14 @@ class _MorePage extends StatelessWidget {
         title: const Text(
           'Mehr',
           style: TextStyle(
-            fontWeight: FontWeight.bold,
+            fontWeight:
+                FontWeight.bold,
           ),
         ),
       ),
       body: ListView(
-        padding: const EdgeInsets.fromLTRB(
+        padding:
+            const EdgeInsets.fromLTRB(
           20,
           16,
           20,
@@ -860,55 +1326,82 @@ class _MorePage extends StatelessWidget {
             child: Column(
               children: [
                 ListTile(
-                  leading: const Icon(
-                    Icons.route_outlined,
+                  leading:
+                      const Icon(
+                    Icons
+                        .route_outlined,
                   ),
-                  title: const Text(
+                  title:
+                      const Text(
                     'Bezirke',
                   ),
-                  subtitle: const Text(
+                  subtitle:
+                      const Text(
                     '25 Bezirke verwalten',
                   ),
-                  trailing: const Icon(
-                    Icons.chevron_right,
+                  trailing:
+                      const Icon(
+                    Icons
+                        .chevron_right,
                   ),
                   onTap: () {
-                    Navigator.of(context).push(
-                      MaterialPageRoute<void>(
-                        builder: (context) =>
-                            const DistrictsPage(),
+                    Navigator.of(
+                      context,
+                    ).push(
+                      MaterialPageRoute<
+                          void>(
+                        builder:
+                            (context) =>
+                                const DistrictsPage(),
                       ),
                     );
                   },
                 ),
-                const Divider(height: 1),
+                const Divider(
+                  height: 1,
+                ),
                 ListTile(
-                  leading: const Icon(
-                    Icons.campaign_outlined,
+                  leading:
+                      const Icon(
+                    Icons
+                        .campaign_outlined,
                   ),
                   title:
-                      const Text('Werbung'),
-                  subtitle: const Text(
+                      const Text(
+                    'Werbung',
+                  ),
+                  subtitle:
+                      const Text(
                     'Gespeicherte Werbungen verwalten',
                   ),
-                  trailing: const Icon(
-                    Icons.chevron_right,
+                  trailing:
+                      const Icon(
+                    Icons
+                        .chevron_right,
                   ),
                   onTap: () {},
                 ),
-                const Divider(height: 1),
+                const Divider(
+                  height: 1,
+                ),
                 ListTile(
-                  leading: const Icon(
-                    Icons.settings_outlined,
+                  leading:
+                      const Icon(
+                    Icons
+                        .settings_outlined,
                   ),
-                  title: const Text(
+                  title:
+                      const Text(
                     'Einstellungen',
                   ),
-                  subtitle: const Text(
+                  subtitle:
+                      const Text(
                     'Arbeitszeiten und App-Einstellungen',
                   ),
-                  trailing: const Icon(
-                    Icons.chevron_right,
+                  trailing:
+                      const Icon(
+                    Icons
+                        .chevron_right,
                   ),
                   onTap: () {},
                 ),
@@ -921,7 +1414,8 @@ class _MorePage extends StatelessWidget {
   }
 }
 
-class _PlaceholderContent extends StatelessWidget {
+class _PlaceholderContent
+    extends StatelessWidget {
   const _PlaceholderContent({
     required this.icon,
     required this.title,
@@ -937,9 +1431,12 @@ class _PlaceholderContent extends StatelessWidget {
     BuildContext context,
   ) {
     return Center(
-      child: SingleChildScrollView(
+      child:
+          SingleChildScrollView(
         padding:
-            const EdgeInsets.all(32),
+            const EdgeInsets.all(
+          32,
+        ),
         child: Column(
           mainAxisAlignment:
               MainAxisAlignment.center,
@@ -947,31 +1444,39 @@ class _PlaceholderContent extends StatelessWidget {
             Icon(
               icon,
               size: 64,
-              color: Theme.of(context)
-                  .colorScheme
-                  .primary,
+              color:
+                  Theme.of(context)
+                      .colorScheme
+                      .primary,
             ),
-            const SizedBox(height: 20),
+            const SizedBox(
+              height: 20,
+            ),
             Text(
               title,
               textAlign:
                   TextAlign.center,
-              style: Theme.of(context)
-                  .textTheme
-                  .headlineSmall
-                  ?.copyWith(
-                    fontWeight:
-                        FontWeight.bold,
-                  ),
+              style:
+                  Theme.of(context)
+                      .textTheme
+                      .headlineSmall
+                      ?.copyWith(
+                        fontWeight:
+                            FontWeight
+                                .bold,
+                      ),
             ),
-            const SizedBox(height: 12),
+            const SizedBox(
+              height: 12,
+            ),
             Text(
               description,
               textAlign:
                   TextAlign.center,
-              style: Theme.of(context)
-                  .textTheme
-                  .bodyLarge,
+              style:
+                  Theme.of(context)
+                      .textTheme
+                      .bodyLarge,
             ),
           ],
         ),
@@ -983,7 +1488,8 @@ class _PlaceholderContent extends StatelessWidget {
 String _formatDuration(
   int minutes,
 ) {
-  final hours = minutes ~/ 60;
+  final hours =
+      minutes ~/ 60;
 
   final remainingMinutes =
       minutes % 60;
@@ -1006,7 +1512,8 @@ String _formatTimeRange(
 String _formatTime(
   int minutes,
 ) {
-  final hours = minutes ~/ 60;
+  final hours =
+      minutes ~/ 60;
 
   final remainingMinutes =
       minutes % 60;

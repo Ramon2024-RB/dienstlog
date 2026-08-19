@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'models/own_tour_entry.dart';
 import 'models/work_day.dart';
 import 'screens/calendar/calendar_page.dart';
+import 'screens/quick_entry/quick_entry_card.dart';
 import 'screens/districts/districts_page.dart';
 import 'screens/statistics/statistics_page.dart';
 import 'screens/work_schedule/work_schedule_page.dart';
@@ -276,6 +277,12 @@ class _OverviewContent extends ConsumerWidget {
           style: Theme.of(context).textTheme.bodyLarge,
         ),
         const SizedBox(height: 24),
+
+        QuickEntryCard(
+          workDay: todayWorkDay,
+        ),
+
+        const SizedBox(height: 16),
 
         _TodayCard(
           workDay: todayWorkDay,

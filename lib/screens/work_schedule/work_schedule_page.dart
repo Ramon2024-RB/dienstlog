@@ -15,6 +15,8 @@ class WorkSchedulePage extends ConsumerStatefulWidget {
 class _WorkSchedulePageState
     extends ConsumerState<WorkSchedulePage> {
   late DateTime _visibleMonth;
+  bool _isMultiSelectMode = false;
+  final Set<DateTime> _selectedDates = <DateTime>{};
 
   static const List<String> _monthNames = [
     'Januar',
@@ -68,6 +70,17 @@ class _WorkSchedulePageState
           ),
         ),
         actions: [
+          IconButton(
+            tooltip: _isMultiSelectMode
+                ? 'Mehrfachauswahl beenden'
+                : 'Mehrere Tage planen',
+            onPressed: _toggleMultiSelectMode,
+            icon: Icon(
+              _isMultiSelectMode
+                  ? Icons.close
+                  : Icons.library_add_check_outlined,
+            ),
+          ),
           IconButton(
             tooltip: 'Heute',
             onPressed: _showCurrentMonth,
@@ -193,6 +206,41 @@ class _WorkSchedulePageState
             ),
           ),
         ),
+        if (_isMultiSelectMode) ...[
+          const SizedBox(height: 20),
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment:
+                    CrossAxisAlignment.stretch,
+                children: [
+                  Text(
+                    _selectedDates.isEmpty
+                        ? 'Wähle die Tage aus, die du gemeinsam planen möchtest.'
+                        : '${_selectedDates.length} Tage ausgewählt',
+                    style: Theme.of(context)
+                        .textTheme
+                        .titleMedium
+                        ?.copyWith(
+                          fontWeight: FontWeight.bold,
+                        ),
+                  ),
+                  const SizedBox(height: 12),
+                  FilledButton.icon(
+                    onPressed: _selectedDates.isEmpty
+                        ? null
+                        : _openMultiDayEditor,
+                    icon: const Icon(Icons.edit_calendar_outlined),
+                    label: const Text(
+                      'Ausgewählte Tage planen',
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
         const SizedBox(height: 20),
         _Legend(),
       ],
@@ -261,7 +309,15 @@ class _WorkSchedulePageState
             date,
             DateTime.now(),
           ),
+          isSelected: _selectedDates.contains(
+            _normalizeDate(date),
+          ),
           onTap: () {
+            if (_isMultiSelectMode) {
+              _toggleSelectedDate(date);
+              return;
+            }
+
             _openDayEditor(
               date,
               entry,
@@ -330,6 +386,121 @@ class _WorkSchedulePageState
         SnackBar(
           content: Text(
             'Die Planung konnte nicht gespeichert werden: $error',
+          ),
+        ),
+      );
+    }
+  }
+
+  void _toggleMultiSelectMode() {
+    setState(() {
+      _isMultiSelectMode = !_isMultiSelectMode;
+
+      if (!_isMultiSelectMode) {
+        _selectedDates.clear();
+      }
+    });
+  }
+
+  void _toggleSelectedDate(DateTime date) {
+    final normalizedDate = _normalizeDate(date);
+
+    setState(() {
+      if (_selectedDates.contains(normalizedDate)) {
+        _selectedDates.remove(normalizedDate);
+      } else {
+        _selectedDates.add(normalizedDate);
+      }
+    });
+  }
+
+  Future<void> _openMultiDayEditor() async {
+    final dates = _selectedDates.toList()
+      ..sort();
+
+    final result = await showModalBottomSheet<
+        _MultiDayScheduleResult>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      builder: (context) {
+        return _MultiDayScheduleSheet(
+          dates: dates,
+        );
+      },
+    );
+
+    if (result == null || !mounted) {
+      return;
+    }
+
+    final notifier = ref.read(
+      workScheduleProvider.notifier,
+    );
+
+    try {
+      final currentEntries =
+          ref.read(workScheduleProvider).when(
+                data: (entries) => entries,
+                loading: () =>
+                    const <WorkScheduleEntry>[],
+                error: (error, stackTrace) =>
+                    const <WorkScheduleEntry>[],
+              );
+
+      for (final date in dates) {
+        WorkScheduleEntry? existingEntry;
+
+        for (final entry in currentEntries) {
+          if (_isSameDate(entry.date, date)) {
+            existingEntry = entry;
+            break;
+          }
+        }
+
+        final id = existingEntry?.id ??
+            'schedule_'
+                '${date.year}_'
+                '${date.month.toString().padLeft(2, '0')}_'
+                '${date.day.toString().padLeft(2, '0')}';
+
+        final entry = WorkScheduleEntry(
+          id: id,
+          date: date,
+          type: result.type,
+          districts: result.type ==
+                  WorkScheduleType.work
+              ? List<String>.from(
+                  result.districts,
+                )
+              : const [],
+          notes: result.notes,
+        );
+
+        if (existingEntry == null) {
+          await notifier.save(entry);
+        } else {
+          await notifier.updateEntry(entry);
+        }
+      }
+
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _selectedDates.clear();
+        _isMultiSelectMode = false;
+      });
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Die Mehrfachplanung konnte nicht gespeichert werden: $error',
           ),
         ),
       );
@@ -471,12 +642,14 @@ class _CalendarDay extends StatelessWidget {
     required this.date,
     required this.entry,
     required this.isToday,
+    required this.isSelected,
     required this.onTap,
   });
 
   final DateTime date;
   final WorkScheduleEntry? entry;
   final bool isToday;
+  final bool isSelected;
   final VoidCallback onTap;
 
   @override
@@ -502,12 +675,17 @@ class _CalendarDay extends StatelessWidget {
           decoration: BoxDecoration(
             borderRadius:
                 BorderRadius.circular(12),
-            border: isToday
+            border: isSelected
                 ? Border.all(
                     color: colorScheme.primary,
-                    width: 2,
+                    width: 3,
                   )
-                : null,
+                : isToday
+                    ? Border.all(
+                        color: colorScheme.primary,
+                        width: 2,
+                      )
+                    : null,
           ),
           padding: const EdgeInsets.symmetric(
             horizontal: 2,
@@ -579,11 +757,7 @@ class _CalendarDay extends StatelessWidget {
           return 'B ${entry.districts.first}';
         }
 
-        return entry.districts
-            .map(
-              (district) => 'B $district',
-            )
-            .join('\n');
+        return 'B ${entry.districts.join(' · ')}';
 
       case WorkScheduleType.packageDriver:
         return 'Paket';
@@ -1090,6 +1264,280 @@ class _WorkScheduleEditorSheetState
         '${months[date.month - 1]} '
         '${date.year}';
   }
+}
+
+
+class _MultiDayScheduleSheet extends StatefulWidget {
+  const _MultiDayScheduleSheet({
+    required this.dates,
+  });
+
+  final List<DateTime> dates;
+
+  @override
+  State<_MultiDayScheduleSheet> createState() =>
+      _MultiDayScheduleSheetState();
+}
+
+class _MultiDayScheduleSheetState
+    extends State<_MultiDayScheduleSheet> {
+  WorkScheduleType _type = WorkScheduleType.work;
+  final List<String> _districts = <String>[];
+  final TextEditingController _districtController =
+      TextEditingController();
+  final TextEditingController _notesController =
+      TextEditingController();
+
+  @override
+  void dispose() {
+    _districtController.dispose();
+    _notesController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final bottomInset =
+        MediaQuery.viewInsetsOf(context).bottom;
+
+    return Padding(
+      padding: EdgeInsets.fromLTRB(
+        20,
+        8,
+        20,
+        20 + bottomInset,
+      ),
+      child: SingleChildScrollView(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Center(
+              child: Container(
+                width: 40,
+                height: 4,
+                margin: const EdgeInsets.only(
+                  bottom: 20,
+                ),
+                decoration: BoxDecoration(
+                  color: Theme.of(context)
+                      .colorScheme
+                      .outlineVariant,
+                  borderRadius:
+                      BorderRadius.circular(2),
+                ),
+              ),
+            ),
+            Text(
+              '${widget.dates.length} Tage planen',
+              style: Theme.of(context)
+                  .textTheme
+                  .headlineSmall
+                  ?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              'Die Planung wird für alle ausgewählten Tage übernommen.',
+              style: Theme.of(context)
+                  .textTheme
+                  .bodyMedium
+                  ?.copyWith(
+                    color: Theme.of(context)
+                        .colorScheme
+                        .onSurfaceVariant,
+                  ),
+            ),
+            const SizedBox(height: 24),
+            DropdownButtonFormField<WorkScheduleType>(
+              initialValue: _type,
+              decoration: const InputDecoration(
+                border: OutlineInputBorder(),
+                labelText: 'Geplanter Einsatz',
+              ),
+              items: WorkScheduleType.values
+                  .map(
+                    (type) =>
+                        DropdownMenuItem<
+                            WorkScheduleType>(
+                      value: type,
+                      child: Row(
+                        children: [
+                          Icon(
+                            _scheduleTypeIcon(type),
+                            size: 20,
+                          ),
+                          const SizedBox(width: 10),
+                          Text(
+                            _scheduleTypeLabel(type),
+                          ),
+                        ],
+                      ),
+                    ),
+                  )
+                  .toList(),
+              onChanged: (value) {
+                if (value == null) {
+                  return;
+                }
+
+                setState(() {
+                  _type = value;
+
+                  if (_type !=
+                      WorkScheduleType.work) {
+                    _districts.clear();
+                  }
+                });
+              },
+            ),
+            if (_type ==
+                WorkScheduleType.work) ...[
+              const SizedBox(height: 24),
+              Text(
+                'Geplante Bezirke',
+                style: Theme.of(context)
+                    .textTheme
+                    .titleMedium
+                    ?.copyWith(
+                      fontWeight: FontWeight.bold,
+                    ),
+              ),
+              const SizedBox(height: 12),
+              Row(
+                crossAxisAlignment:
+                    CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller:
+                          _districtController,
+                      keyboardType:
+                          TextInputType.number,
+                      decoration:
+                          const InputDecoration(
+                        border:
+                            OutlineInputBorder(),
+                        labelText: 'Bezirk',
+                        hintText: 'z. B. 19',
+                      ),
+                      onSubmitted: (_) =>
+                          _addDistrict(),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  IconButton.filled(
+                    onPressed: _addDistrict,
+                    tooltip: 'Bezirk hinzufügen',
+                    icon: const Icon(Icons.add),
+                  ),
+                ],
+              ),
+              if (_districts.isNotEmpty) ...[
+                const SizedBox(height: 12),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: _districts
+                      .map(
+                        (district) => InputChip(
+                          label: Text(
+                            'Bezirk $district',
+                          ),
+                          avatar: const Icon(
+                            Icons.route_outlined,
+                            size: 18,
+                          ),
+                          onDeleted: () {
+                            setState(() {
+                              _districts.remove(
+                                district,
+                              );
+                            });
+                          },
+                        ),
+                      )
+                      .toList(),
+                ),
+              ],
+            ],
+            const SizedBox(height: 24),
+            TextField(
+              controller: _notesController,
+              minLines: 2,
+              maxLines: 4,
+              decoration: const InputDecoration(
+                border: OutlineInputBorder(),
+                labelText: 'Notiz',
+                hintText: 'Optional',
+              ),
+            ),
+            const SizedBox(height: 24),
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton.icon(
+                onPressed: _save,
+                icon: const Icon(Icons.check),
+                label: const Text(
+                  'Für alle Tage speichern',
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _addDistrict() {
+    final district =
+        _districtController.text.trim();
+
+    if (district.isEmpty ||
+        _districts.contains(district)) {
+      _districtController.clear();
+      return;
+    }
+
+    setState(() {
+      _districts.add(district);
+      _districtController.clear();
+    });
+  }
+
+  void _save() {
+    if (_type == WorkScheduleType.work &&
+        _districtController.text
+            .trim()
+            .isNotEmpty) {
+      _addDistrict();
+    }
+
+    final notes =
+        _notesController.text.trim();
+
+    Navigator.of(context).pop(
+      _MultiDayScheduleResult(
+        type: _type,
+        districts: List<String>.from(
+          _districts,
+        ),
+        notes: notes.isEmpty ? null : notes,
+      ),
+    );
+  }
+}
+
+class _MultiDayScheduleResult {
+  const _MultiDayScheduleResult({
+    required this.type,
+    required this.districts,
+    required this.notes,
+  });
+
+  final WorkScheduleType type;
+  final List<String> districts;
+  final String? notes;
 }
 
 class _WorkScheduleEditorResult {

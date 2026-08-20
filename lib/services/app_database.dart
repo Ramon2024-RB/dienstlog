@@ -1033,6 +1033,169 @@ class AppDatabase {
     );
   }
 
+  Future<Map<String, Object?>> exportBackupData() async {
+    final db = await database;
+
+    return {
+      'backup_version': 1,
+      'database_version': _databaseVersion,
+      'created_at': DateTime.now().toIso8601String(),
+      'tables': {
+        'districts': await db.query(
+          'districts',
+          orderBy: 'number ASC',
+        ),
+        'work_days': await db.query(
+          'work_days',
+          orderBy: 'date ASC',
+        ),
+        'own_tour_entries': await db.query(
+          'own_tour_entries',
+          orderBy: 'id ASC',
+        ),
+        'support_entries': await db.query(
+          'support_entries',
+          orderBy: 'id ASC',
+        ),
+        'work_schedule_entries': await db.query(
+          'work_schedule_entries',
+          orderBy: 'date ASC',
+        ),
+        'work_time_settings': await db.query(
+          'work_time_settings',
+          orderBy: 'weekday ASC',
+        ),
+      },
+    };
+  }
+
+  Future<void> importBackupData(
+    Map<String, Object?> backup,
+  ) async {
+    final backupVersion = backup['backup_version'];
+
+    if (backupVersion != 1) {
+      throw const FormatException(
+        'Diese Backup-Version wird nicht unterstützt.',
+      );
+    }
+
+    final tablesValue = backup['tables'];
+
+    if (tablesValue is! Map) {
+      throw const FormatException(
+        'Das Backup enthält keine gültigen Tabellendaten.',
+      );
+    }
+
+    final tables = Map<String, Object?>.from(
+      tablesValue,
+    );
+
+    const requiredTables = [
+      'districts',
+      'work_days',
+      'own_tour_entries',
+      'support_entries',
+      'work_schedule_entries',
+      'work_time_settings',
+    ];
+
+    for (final tableName in requiredTables) {
+      if (tables[tableName] is! List) {
+        throw FormatException(
+          'Im Backup fehlt die Tabelle "$tableName".',
+        );
+      }
+    }
+
+    List<Map<String, Object?>> readRows(
+      String tableName,
+    ) {
+      final rows = tables[tableName] as List;
+
+      return rows.map((row) {
+        if (row is! Map) {
+          throw FormatException(
+            'Ungültige Daten in "$tableName".',
+          );
+        }
+
+        return Map<String, Object?>.from(row);
+      }).toList();
+    }
+
+    final districts = readRows('districts');
+    final workDays = readRows('work_days');
+    final ownTourEntries =
+        readRows('own_tour_entries');
+    final supportEntries =
+        readRows('support_entries');
+    final workScheduleEntries =
+        readRows('work_schedule_entries');
+    final workTimeSettings =
+        readRows('work_time_settings');
+
+    final db = await database;
+
+    await db.transaction((txn) async {
+      await txn.delete('own_tour_entries');
+      await txn.delete('support_entries');
+      await txn.delete('work_days');
+      await txn.delete('work_schedule_entries');
+      await txn.delete('work_time_settings');
+      await txn.delete('districts');
+
+      for (final row in districts) {
+        await txn.insert(
+          'districts',
+          row,
+          conflictAlgorithm: ConflictAlgorithm.replace,
+        );
+      }
+
+      for (final row in workDays) {
+        await txn.insert(
+          'work_days',
+          row,
+          conflictAlgorithm: ConflictAlgorithm.replace,
+        );
+      }
+
+      for (final row in ownTourEntries) {
+        await txn.insert(
+          'own_tour_entries',
+          row,
+          conflictAlgorithm: ConflictAlgorithm.replace,
+        );
+      }
+
+      for (final row in supportEntries) {
+        await txn.insert(
+          'support_entries',
+          row,
+          conflictAlgorithm: ConflictAlgorithm.replace,
+        );
+      }
+
+      for (final row in workScheduleEntries) {
+        await txn.insert(
+          'work_schedule_entries',
+          row,
+          conflictAlgorithm: ConflictAlgorithm.replace,
+        );
+      }
+
+      for (final row in workTimeSettings) {
+        await txn.insert(
+          'work_time_settings',
+          row,
+          conflictAlgorithm: ConflictAlgorithm.replace,
+        );
+      }
+    });
+  }
+
   String _normalizeDate(DateTime date) {
     return DateTime(
       date.year,

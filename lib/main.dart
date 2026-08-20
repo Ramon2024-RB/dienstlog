@@ -1,3 +1,6 @@
+import 'dart:async';
+
+import 'package:app_links/app_links.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -68,14 +71,86 @@ class MainNavigationPage extends StatefulWidget {
 class _MainNavigationPageState
     extends State<MainNavigationPage> {
   int _selectedIndex = 0;
+  QuickEntryExternalAction? _externalQuickAction;
 
-  static const List<Widget> _pages = [
-    _OverviewPage(),
-    WorkSchedulePage(),
-    CalendarPage(),
-    StatisticsPage(),
-    _MorePage(),
-  ];
+  final AppLinks _appLinks = AppLinks();
+  StreamSubscription<Uri>? _linkSubscription;
+
+  @override
+  void initState() {
+    super.initState();
+    _initializeDeepLinks();
+  }
+
+  Future<void> _initializeDeepLinks() async {
+    try {
+      final initialLink = await _appLinks.getInitialLink();
+
+      if (initialLink != null && mounted) {
+        _handleDeepLink(initialLink);
+      }
+    } catch (_) {
+      // TourLog startet normal weiter, falls kein
+      // Initial-Link verfügbar ist.
+    }
+
+    _linkSubscription = _appLinks.uriLinkStream.listen(
+      (uri) {
+        if (mounted) {
+          _handleDeepLink(uri);
+        }
+      },
+    );
+  }
+
+  void _handleDeepLink(Uri uri) {
+    if (uri.scheme != 'tourlog') {
+      return;
+    }
+
+    final command =
+        uri.host == 'quick' && uri.pathSegments.isNotEmpty
+        ? uri.pathSegments.first
+        : uri.pathSegments.isNotEmpty
+        ? uri.pathSegments.last
+        : null;
+
+    QuickEntryExternalAction? action;
+
+    switch (command) {
+      case 'work-start':
+        action = QuickEntryExternalAction.workStart;
+        break;
+      case 'delivery-start':
+        action = QuickEntryExternalAction.deliveryStart;
+        break;
+      case 'delivery-end':
+        action = QuickEntryExternalAction.deliveryEnd;
+        break;
+      case 'work-end':
+        action = QuickEntryExternalAction.workEnd;
+        break;
+    }
+
+    if (action == null) {
+      return;
+    }
+
+    setState(() {
+      _selectedIndex = 0;
+      _externalQuickAction = action;
+    });
+  }
+
+  void _onExternalQuickActionHandled() {
+    if (!mounted) {
+      return;
+    }
+
+    setState(() {
+      _externalQuickAction = null;
+    });
+  }
 
   void _onDestinationSelected(int index) {
     setState(() {
@@ -84,11 +159,29 @@ class _MainNavigationPageState
   }
 
   @override
+  void dispose() {
+    _linkSubscription?.cancel();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final pages = <Widget>[
+      _OverviewPage(
+        externalQuickAction: _externalQuickAction,
+        onExternalQuickActionHandled:
+            _onExternalQuickActionHandled,
+      ),
+      const WorkSchedulePage(),
+      const CalendarPage(),
+      const StatisticsPage(),
+      const _MorePage(),
+    ];
+
     return Scaffold(
       body: IndexedStack(
         index: _selectedIndex,
-        children: _pages,
+        children: pages,
       ),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _selectedIndex,
@@ -126,7 +219,13 @@ class _MainNavigationPageState
 }
 
 class _OverviewPage extends ConsumerWidget {
-  const _OverviewPage();
+  const _OverviewPage({
+    required this.externalQuickAction,
+    required this.onExternalQuickActionHandled,
+  });
+
+  final QuickEntryExternalAction? externalQuickAction;
+  final VoidCallback onExternalQuickActionHandled;
 
   @override
   Widget build(
@@ -184,6 +283,9 @@ class _OverviewPage extends ConsumerWidget {
         data: (workDays) {
           return _OverviewContent(
             workDays: workDays,
+            externalQuickAction: externalQuickAction,
+            onExternalQuickActionHandled:
+                onExternalQuickActionHandled,
           );
         },
       ),
@@ -194,9 +296,13 @@ class _OverviewPage extends ConsumerWidget {
 class _OverviewContent extends ConsumerWidget {
   const _OverviewContent({
     required this.workDays,
+    required this.externalQuickAction,
+    required this.onExternalQuickActionHandled,
   });
 
   final List<WorkDay> workDays;
+  final QuickEntryExternalAction? externalQuickAction;
+  final VoidCallback onExternalQuickActionHandled;
 
   @override
   Widget build(
@@ -280,6 +386,9 @@ class _OverviewContent extends ConsumerWidget {
 
         QuickEntryCard(
           workDay: todayWorkDay,
+          externalAction: externalQuickAction,
+          onExternalActionHandled:
+              onExternalQuickActionHandled,
         ),
 
         const SizedBox(height: 16),

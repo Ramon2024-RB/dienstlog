@@ -5,26 +5,123 @@ import '../../models/own_tour_entry.dart';
 import '../../models/work_day.dart';
 import '../../services/work_day_provider.dart';
 
-class QuickEntryCard extends ConsumerWidget {
+enum QuickEntryExternalAction {
+  workStart,
+  deliveryStart,
+  deliveryEnd,
+  workEnd,
+}
+
+class QuickEntryCard extends ConsumerStatefulWidget {
   const QuickEntryCard({
     super.key,
     required this.workDay,
+    this.externalAction,
+    this.onExternalActionHandled,
   });
 
   final WorkDay? workDay;
+  final QuickEntryExternalAction? externalAction;
+  final VoidCallback? onExternalActionHandled;
 
   @override
-  Widget build(
-    BuildContext context,
-    WidgetRef ref,
+  ConsumerState<QuickEntryCard> createState() =>
+      _QuickEntryCardState();
+}
+
+class _QuickEntryCardState
+    extends ConsumerState<QuickEntryCard> {
+  QuickEntryExternalAction? _lastHandledAction;
+
+  WorkDay? get workDay => widget.workDay;
+
+  @override
+  void initState() {
+    super.initState();
+    _scheduleExternalActionIfNeeded();
+  }
+
+  @override
+  void didUpdateWidget(
+    covariant QuickEntryCard oldWidget,
   ) {
+    super.didUpdateWidget(oldWidget);
+
+    if (oldWidget.externalAction !=
+        widget.externalAction) {
+      if (widget.externalAction == null) {
+        _lastHandledAction = null;
+      }
+
+      _scheduleExternalActionIfNeeded();
+    }
+  }
+
+  void _scheduleExternalActionIfNeeded() {
+    final action = widget.externalAction;
+
+    if (action == null ||
+        action == _lastHandledAction) {
+      return;
+    }
+
+    _lastHandledAction = action;
+
+    WidgetsBinding.instance.addPostFrameCallback(
+      (_) async {
+        if (!mounted) {
+          return;
+        }
+
+        switch (action) {
+          case QuickEntryExternalAction.workStart:
+            await _saveSimpleTime(
+              context: context,
+              ref: ref,
+              action: _QuickTimeAction.workStart,
+            );
+            break;
+
+          case QuickEntryExternalAction.deliveryStart:
+            await _startDelivery(
+              context,
+              ref,
+            );
+            break;
+
+          case QuickEntryExternalAction.deliveryEnd:
+            await _endDelivery(
+              context,
+              ref,
+            );
+            break;
+
+          case QuickEntryExternalAction.workEnd:
+            await _saveSimpleTime(
+              context: context,
+              ref: ref,
+              action: _QuickTimeAction.workEnd,
+            );
+            break;
+        }
+
+        if (mounted) {
+          widget.onExternalActionHandled?.call();
+        }
+      },
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final currentWorkDay = workDay;
 
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(20),
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+          crossAxisAlignment:
+              CrossAxisAlignment.start,
           children: [
             Row(
               children: [
@@ -41,7 +138,8 @@ class QuickEntryCard extends ConsumerWidget {
                       .textTheme
                       .titleLarge
                       ?.copyWith(
-                        fontWeight: FontWeight.bold,
+                        fontWeight:
+                            FontWeight.bold,
                       ),
                 ),
               ],
@@ -59,6 +157,7 @@ class QuickEntryCard extends ConsumerWidget {
                   ),
             ),
             const SizedBox(height: 20),
+
             _QuickActionTile(
               icon: Icons.login,
               title: 'Dienstbeginn',
@@ -73,7 +172,9 @@ class QuickEntryCard extends ConsumerWidget {
                 action: _QuickTimeAction.workStart,
               ),
             ),
+
             const SizedBox(height: 10),
+
             _QuickActionTile(
               icon: Icons.local_shipping_outlined,
               title: 'Zustellungsbeginn',
@@ -81,13 +182,16 @@ class QuickEntryCard extends ConsumerWidget {
                 currentWorkDay?.departureTime,
               ),
               isDone:
-                  currentWorkDay?.departureTime != null,
+                  currentWorkDay?.departureTime !=
+                      null,
               onTap: () => _startDelivery(
                 context,
                 ref,
               ),
             ),
+
             const SizedBox(height: 10),
+
             _QuickActionTile(
               icon: Icons.inventory_2_outlined,
               title: 'Zustellungsende',
@@ -101,7 +205,9 @@ class QuickEntryCard extends ConsumerWidget {
                 ref,
               ),
             ),
+
             const SizedBox(height: 10),
+
             _QuickActionTile(
               icon: Icons.logout,
               title: 'Dienstende',
@@ -129,6 +235,7 @@ class QuickEntryCard extends ConsumerWidget {
   }) async {
     final now = DateTime.now();
     final minutes = _minutesSinceMidnight(now);
+
     final existingValue = switch (action) {
       _QuickTimeAction.workStart =>
         workDay?.workStart,
@@ -143,9 +250,29 @@ class QuickEntryCard extends ConsumerWidget {
         'Dienstende',
     };
 
+    if (action == _QuickTimeAction.workEnd) {
+      final current = workDay;
+
+      if (current?.deliveryEnd == null) {
+        final continueWithoutDeliveryEnd =
+            await _confirm(
+          context,
+          title: 'Zustellungsende fehlt',
+          message:
+              'Trotzdem Dienstende um ${_formatTime(minutes)} Uhr speichern?',
+        );
+
+        if (!continueWithoutDeliveryEnd ||
+            !context.mounted) {
+          return;
+        }
+      }
+    }
+
     final question = existingValue == null
-        ? '$title jetzt um ${_formatTime(minutes)} speichern?'
-        : '$title ist bereits mit ${_formatTime(existingValue)} gespeichert.\n\nAuf ${_formatTime(minutes)} ändern?';
+        ? '${_formatTime(minutes)} Uhr speichern?'
+        : 'Bereits: ${_formatTime(existingValue)} Uhr\n'
+            'Neu: ${_formatTime(minutes)} Uhr';
 
     final confirmed = await _confirm(
       context,
@@ -164,12 +291,44 @@ class QuickEntryCard extends ConsumerWidget {
     WorkDay updated = _baseWorkDay(latestNow);
 
     if (action == _QuickTimeAction.workStart) {
+      if (updated.departureTime != null &&
+          latestMinutes >
+              updated.departureTime!) {
+        _showMessage(
+          context,
+          'Der Dienstbeginn kann nicht nach dem Zustellungsbeginn liegen.',
+        );
+        return;
+      }
+
       updated = updated.copyWith(
         workStart: latestMinutes,
       );
     } else {
+      if (updated.deliveryEnd != null &&
+          latestMinutes <
+              updated.deliveryEnd!) {
+        _showMessage(
+          context,
+          'Das Dienstende kann nicht vor dem Zustellungsende liegen.',
+        );
+        return;
+      }
+
+      if (updated.deliveryEnd == null &&
+          updated.departureTime != null &&
+          latestMinutes <
+              updated.departureTime!) {
+        _showMessage(
+          context,
+          'Das Dienstende kann nicht vor dem Zustellungsbeginn liegen.',
+        );
+        return;
+      }
+
       if (updated.workStart != null &&
-          latestMinutes < updated.workStart!) {
+          latestMinutes <
+              updated.workStart!) {
         _showMessage(
           context,
           'Das Dienstende kann nicht vor dem Dienstbeginn liegen.',
@@ -201,7 +360,7 @@ class QuickEntryCard extends ConsumerWidget {
         context,
         title: 'Kein Dienstbeginn',
         message:
-            'Für heute ist noch kein Dienstbeginn gespeichert. Zustellung trotzdem starten?',
+            'Noch kein Dienstbeginn gespeichert.\nTrotzdem starten?',
       );
 
       if (!continueWithoutWorkStart ||
@@ -257,12 +416,24 @@ class QuickEntryCard extends ConsumerWidget {
     final existingTime =
         existing?.departureTime;
 
+    final advertisingText =
+        result.hasAdvertising
+            ? 'Werbung'
+            : 'Keine Werbung';
+
     final confirmed = await _confirm(
       context,
       title: 'Zustellungsbeginn',
       message: existingTime == null
-          ? 'Zustellung in Bezirk ${result.district} mit ${result.packages} Paketen jetzt um ${_formatTime(previewMinutes)} starten?'
-          : 'Zustellungsbeginn ist bereits mit ${_formatTime(existingTime)} gespeichert.\n\nMit den neuen Angaben auf ${_formatTime(previewMinutes)} ändern?',
+          ? 'Bezirk ${result.district} · '
+              '${result.packages} Pakete · '
+              '$advertisingText\n'
+              '${_formatTime(previewMinutes)} Uhr'
+          : 'Bezirk ${result.district} · '
+              '${result.packages} Pakete · '
+              '$advertisingText\n\n'
+              'Bereits: ${_formatTime(existingTime)} Uhr\n'
+              'Neu: ${_formatTime(previewMinutes)} Uhr',
     );
 
     if (!confirmed || !context.mounted) {
@@ -270,7 +441,8 @@ class QuickEntryCard extends ConsumerWidget {
     }
 
     final now = DateTime.now();
-    final minutes = _minutesSinceMidnight(now);
+    final minutes =
+        _minutesSinceMidnight(now);
     final base = _baseWorkDay(now);
 
     if (base.workStart != null &&
@@ -278,6 +450,24 @@ class QuickEntryCard extends ConsumerWidget {
       _showMessage(
         context,
         'Der Zustellungsbeginn kann nicht vor dem Dienstbeginn liegen.',
+      );
+      return;
+    }
+
+    if (base.deliveryEnd != null &&
+        minutes > base.deliveryEnd!) {
+      _showMessage(
+        context,
+        'Der Zustellungsbeginn kann nicht nach dem Zustellungsende liegen.',
+      );
+      return;
+    }
+
+    if (base.workEnd != null &&
+        minutes > base.workEnd!) {
+      _showMessage(
+        context,
+        'Der Zustellungsbeginn kann nicht nach dem Dienstende liegen.',
       );
       return;
     }
@@ -292,7 +482,8 @@ class QuickEntryCard extends ConsumerWidget {
       packageCount: result.packages,
       cancelledPackageCount: 0,
       hasAdvertising: result.hasAdvertising,
-      clearAdvertising: !result.hasAdvertising,
+      clearAdvertising:
+          !result.hasAdvertising,
     );
 
     final ownTour = OwnTourEntry(
@@ -331,7 +522,7 @@ class QuickEntryCard extends ConsumerWidget {
         context,
         title: 'Kein Zustellungsbeginn',
         message:
-            'Für heute ist noch kein Zustellungsbeginn gespeichert. Zustellungsende trotzdem erfassen?',
+            'Noch kein Zustellungsbeginn gespeichert.\nTrotzdem beenden?',
       );
 
       if (!continueWithoutStart ||
@@ -354,8 +545,6 @@ class QuickEntryCard extends ConsumerWidget {
       return;
     }
 
-    // null means the sheet was cancelled. Empty string means:
-    // continue without a note.
     if (note == null) {
       return;
     }
@@ -368,8 +557,9 @@ class QuickEntryCard extends ConsumerWidget {
       context,
       title: 'Zustellungsende',
       message: existing.deliveryEnd == null
-          ? 'Zustellungsende jetzt um ${_formatTime(previewMinutes)} speichern?'
-          : 'Zustellungsende ist bereits mit ${_formatTime(existing.deliveryEnd)} gespeichert.\n\nAuf ${_formatTime(previewMinutes)} ändern?',
+          ? '${_formatTime(previewMinutes)} Uhr speichern?'
+          : 'Bereits: ${_formatTime(existing.deliveryEnd)} Uhr\n'
+              'Neu: ${_formatTime(previewMinutes)} Uhr',
     );
 
     if (!confirmed || !context.mounted) {
@@ -377,13 +567,32 @@ class QuickEntryCard extends ConsumerWidget {
     }
 
     final now = DateTime.now();
-    final minutes = _minutesSinceMidnight(now);
+    final minutes =
+        _minutesSinceMidnight(now);
 
     if (existing.departureTime != null &&
         minutes < existing.departureTime!) {
       _showMessage(
         context,
         'Das Zustellungsende kann nicht vor dem Zustellungsbeginn liegen.',
+      );
+      return;
+    }
+
+    if (existing.workStart != null &&
+        minutes < existing.workStart!) {
+      _showMessage(
+        context,
+        'Das Zustellungsende kann nicht vor dem Dienstbeginn liegen.',
+      );
+      return;
+    }
+
+    if (existing.workEnd != null &&
+        minutes > existing.workEnd!) {
+      _showMessage(
+        context,
+        'Das Zustellungsende kann nicht nach dem Dienstende liegen.',
       );
       return;
     }
@@ -537,8 +746,7 @@ class QuickEntryCard extends ConsumerWidget {
     BuildContext context,
     String message,
   ) {
-    ScaffoldMessenger.of(context)
-        .showSnackBar(
+    ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(message),
       ),
@@ -694,8 +902,10 @@ class _DeliveryStartSheetState
     extends State<_DeliveryStartSheet> {
   late final TextEditingController
       _districtController;
+
   late final TextEditingController
       _packageController;
+
   late bool _hasAdvertising;
 
   @override
@@ -863,8 +1073,7 @@ class _DeliveryStartSheetState
   }
 
   void _showError(String message) {
-    ScaffoldMessenger.of(context)
-        .showSnackBar(
+    ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(message),
       ),
@@ -949,7 +1158,7 @@ class _DeliveryEndSheetState
             ),
             const SizedBox(height: 6),
             Text(
-              'Du kannst optional noch eine Notiz zum Zustellungsende hinzufügen.',
+              'Optional kannst du eine kurze Notiz hinzufügen.',
               style: Theme.of(context)
                   .textTheme
                   .bodyMedium,

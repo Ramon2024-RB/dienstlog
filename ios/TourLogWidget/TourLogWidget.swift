@@ -19,6 +19,8 @@ struct TourLogEntry: TimelineEntry {
 
 struct TourLogProvider: TimelineProvider {
 
+    private let appGroupName = "group.com.example.dienstlog"
+
     func placeholder(in context: Context) -> TourLogEntry {
         TourLogEntry(
             date: Date(),
@@ -33,35 +35,120 @@ struct TourLogProvider: TimelineProvider {
         in context: Context,
         completion: @escaping (TourLogEntry) -> Void
     ) {
-        let entry = TourLogEntry(
-            date: Date(),
-            workStart: "07:03",
-            deliveryStart: "08:16",
-            deliveryEnd: nil,
-            workEnd: nil
-        )
+        if context.isPreview {
+            completion(
+                TourLogEntry(
+                    date: Date(),
+                    workStart: "07:03",
+                    deliveryStart: "08:16",
+                    deliveryEnd: nil,
+                    workEnd: nil
+                )
+            )
 
-        completion(entry)
+            return
+        }
+
+        completion(
+            makeCurrentEntry()
+        )
     }
 
     func getTimeline(
         in context: Context,
         completion: @escaping (Timeline<TourLogEntry>) -> Void
     ) {
-        let entry = TourLogEntry(
+        let entry = makeCurrentEntry()
+
+        let nextMidnight =
+            Calendar.current.nextDate(
+                after: Date(),
+                matching: DateComponents(
+                    hour: 0,
+                    minute: 0,
+                    second: 5
+                ),
+                matchingPolicy: .nextTime
+            )
+
+        let timeline = Timeline(
+            entries: [entry],
+            policy: nextMidnight.map {
+                .after($0)
+            } ?? .never
+        )
+
+        completion(timeline)
+    }
+
+    private func makeCurrentEntry() -> TourLogEntry {
+
+        guard
+            let defaults = UserDefaults(
+                suiteName: appGroupName
+            )
+        else {
+            return emptyEntry()
+        }
+
+        guard
+            let storedDate = defaults.string(
+                forKey: "workDayDate"
+            ),
+            storedDate == todayString()
+        else {
+            return emptyEntry()
+        }
+
+        return TourLogEntry(
+            date: Date(),
+            workStart: defaults.string(
+                forKey: "workStart"
+            ),
+            deliveryStart: defaults.string(
+                forKey: "deliveryStart"
+            ),
+            deliveryEnd: defaults.string(
+                forKey: "deliveryEnd"
+            ),
+            workEnd: defaults.string(
+                forKey: "workEnd"
+            )
+        )
+    }
+
+    private func emptyEntry() -> TourLogEntry {
+        TourLogEntry(
             date: Date(),
             workStart: nil,
             deliveryStart: nil,
             deliveryEnd: nil,
             workEnd: nil
         )
+    }
 
-        let timeline = Timeline(
-            entries: [entry],
-            policy: .never
+    private func todayString() -> String {
+        let calendar = Calendar.current
+
+        let components = calendar.dateComponents(
+            [
+                .year,
+                .month,
+                .day
+            ],
+            from: Date()
         )
 
-        completion(timeline)
+        let year = components.year ?? 0
+        let month = components.month ?? 0
+        let day = components.day ?? 0
+
+        return String(
+            format: "%04d-%02d-%02d",
+            year,
+            month,
+            day
+        )
     }
 }
 
@@ -76,8 +163,10 @@ struct TourLogWidgetEntryView: View {
         ) {
 
             HStack {
-                Image(systemName: "shippingbox.fill")
-                    .foregroundStyle(.black)
+                Image(
+                    systemName: "shippingbox.fill"
+                )
+                .foregroundStyle(.black)
 
                 Text("TourLog")
                     .font(.headline)
@@ -94,32 +183,64 @@ struct TourLogWidgetEntryView: View {
 
             HStack(spacing: 8) {
 
-                TourLogAction(
-                    icon: "clock.fill",
-                    title: "Dienst",
-                    time: entry.workStart
-                )
+                Link(
+                    destination: URL(
+                        string:
+                            "tourlog://quick/work-start"
+                    )!
+                ) {
+                    TourLogAction(
+                        icon: "clock.fill",
+                        title: "Dienst",
+                        time: entry.workStart
+                    )
+                }
+                .buttonStyle(.plain)
 
-                TourLogAction(
-                    icon: "truck.box.fill",
-                    title: "Start",
-                    time: entry.deliveryStart
-                )
+                Link(
+                    destination: URL(
+                        string:
+                            "tourlog://quick/delivery-start"
+                    )!
+                ) {
+                    TourLogAction(
+                        icon: "truck.box.fill",
+                        title: "Start",
+                        time: entry.deliveryStart
+                    )
+                }
+                .buttonStyle(.plain)
             }
 
             HStack(spacing: 8) {
 
-                TourLogAction(
-                    icon: "shippingbox.fill",
-                    title: "Ende",
-                    time: entry.deliveryEnd
-                )
+                Link(
+                    destination: URL(
+                        string:
+                            "tourlog://quick/delivery-end"
+                    )!
+                ) {
+                    TourLogAction(
+                        icon: "shippingbox.fill",
+                        title: "Ende",
+                        time: entry.deliveryEnd
+                    )
+                }
+                .buttonStyle(.plain)
 
-                TourLogAction(
-                    icon: "flag.checkered",
-                    title: "Feierabend",
-                    time: entry.workEnd
-                )
+                Link(
+                    destination: URL(
+                        string:
+                            "tourlog://quick/work-end"
+                    )!
+                ) {
+                    TourLogAction(
+                        icon: "flag.checkered",
+                        title: "Feierabend",
+                        time: entry.workEnd
+                    )
+                }
+                .buttonStyle(.plain)
             }
         }
         .padding()
@@ -140,11 +261,16 @@ struct TourLogAction: View {
         HStack(spacing: 7) {
 
             Image(
-                systemName: time == nil
-                    ? icon
-                    : "checkmark.circle.fill"
+                systemName:
+                    time == nil
+                        ? icon
+                        : "checkmark.circle.fill"
             )
-            .font(.system(size: 15))
+            .font(
+                .system(
+                    size: 15
+                )
+            )
             .foregroundStyle(
                 time == nil
                     ? Color.primary
@@ -160,28 +286,49 @@ struct TourLogAction: View {
                     .fontWeight(.semibold)
                     .lineLimit(1)
 
-                Text(time ?? "Tippen")
-                    .font(.caption)
-                    .fontWeight(
-                        time == nil
-                            ? .regular
-                            : .bold
-                    )
-                    .foregroundStyle(
-                        time == nil
-                            ? Color.secondary
-                            : Color.primary
-                    )
+                Text(
+                    time ?? "Tippen"
+                )
+                .font(.caption)
+                .fontWeight(
+                    time == nil
+                        ? .regular
+                        : .bold
+                )
+                .foregroundStyle(
+                    time == nil
+                        ? Color.secondary
+                        : Color.primary
+                )
             }
 
-            Spacer(minLength: 0)
+            Spacer(
+                minLength: 0
+            )
         }
-        .padding(.horizontal, 9)
-        .padding(.vertical, 7)
+        .frame(
+            maxWidth: .infinity,
+            alignment: .leading
+        )
+        .padding(
+            .horizontal,
+            9
+        )
+        .padding(
+            .vertical,
+            7
+        )
         .background(
-            Color.primary.opacity(0.06)
+            Color.primary.opacity(
+                0.06
+            )
         )
         .clipShape(
+            RoundedRectangle(
+                cornerRadius: 10
+            )
+        )
+        .contentShape(
             RoundedRectangle(
                 cornerRadius: 10
             )
@@ -191,7 +338,8 @@ struct TourLogAction: View {
 
 struct TourLogWidget: Widget {
 
-    let kind: String = "TourLogWidget"
+    let kind: String =
+        "TourLogWidget"
 
     var body: some WidgetConfiguration {
 
@@ -204,7 +352,9 @@ struct TourLogWidget: Widget {
                 entry: entry
             )
         }
-        .configurationDisplayName("TourLog")
+        .configurationDisplayName(
+            "TourLog"
+        )
         .description(
             "Dienst- und Zustellzeiten direkt im Blick."
         )

@@ -40,6 +40,7 @@ dependencies:
   uuid: ^4.6.0
   flutter_localizations:
     sdk: flutter
+  app_links: ^7.2.1
 
 dev_dependencies:
   flutter_test:

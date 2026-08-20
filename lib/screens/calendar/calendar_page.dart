@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../models/own_tour_entry.dart';
+import '../../models/support_entry.dart';
 import '../../models/work_day.dart';
 import '../../services/work_day_provider.dart';
 import '../work_days/add_work_day_page.dart';
@@ -148,6 +150,8 @@ class _CalendarPageState extends ConsumerState<CalendarPage> {
         builder: (context) {
           return _ExistingWorkDaySheet(
             workDay: existingWorkDay,
+            ownTourEntries: ownTourEntries,
+            supportEntries: supportEntries,
           );
         },
       );
@@ -802,78 +806,171 @@ enum _WorkDayAction {
 class _ExistingWorkDaySheet extends StatelessWidget {
   const _ExistingWorkDaySheet({
     required this.workDay,
+    required this.ownTourEntries,
+    required this.supportEntries,
   });
 
   final WorkDay workDay;
+  final List<OwnTourEntry> ownTourEntries;
+  final List<SupportEntry> supportEntries;
 
   @override
   Widget build(BuildContext context) {
+    final isWorkDay = workDay.type == WorkDayType.work;
+
     return SafeArea(
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(
-          20,
-          8,
-          20,
-          24,
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              _formatDate(workDay.date),
-              style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                    fontWeight: FontWeight.bold,
+      child: SingleChildScrollView(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(
+            20,
+            8,
+            20,
+            24,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                _formatDate(workDay.date),
+                style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                      fontWeight: FontWeight.bold,
+                    ),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                _workDayDescription(workDay),
+                style: Theme.of(context).textTheme.bodyLarge,
+              ),
+              if (isWorkDay) ...[
+                const SizedBox(height: 20),
+                _SheetInfoRow(
+                  label: 'Arbeitszeit',
+                  value: workDay.workDurationMinutes == null
+                      ? '–'
+                      : _formatDuration(
+                          workDay.workDurationMinutes!,
+                        ),
+                ),
+                if (ownTourEntries.isNotEmpty) ...[
+                  const SizedBox(height: 20),
+                  Text(
+                    'Eigene Zustellung',
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.bold,
+                        ),
                   ),
-            ),
-            const SizedBox(height: 6),
-            Text(
-              _workDayDescription(workDay),
-              style: Theme.of(context).textTheme.bodyLarge,
-            ),
-            if (workDay.type == WorkDayType.work) ...[
-              const SizedBox(height: 16),
-              _SheetInfoRow(
-                label: 'Arbeitszeit',
-                value: workDay.workDurationMinutes == null
-                    ? '–'
-                    : _formatDuration(
-                        workDay.workDurationMinutes!,
+                  const SizedBox(height: 10),
+                  for (final entry in ownTourEntries) ...[
+                    _TourDetailCard(
+                      icon: Icons.route_outlined,
+                      title: 'Bezirk ${entry.district}',
+                      packageText: '${entry.packageCount} Pakete',
+                      secondaryText: entry.cancelledPackageCount > 0
+                          ? '${entry.cancelledPackageCount} abgebrochen'
+                          : null,
+                    ),
+                    const SizedBox(height: 8),
+                  ],
+                ] else if (workDay.assignmentType ==
+                    WorkAssignmentType.ownDistrict) ...[
+                  const SizedBox(height: 20),
+                  Text(
+                    'Eigene Zustellung',
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.bold,
+                        ),
+                  ),
+                  const SizedBox(height: 10),
+                  _TourDetailCard(
+                    icon: Icons.route_outlined,
+                    title: workDay.districtId == null
+                        ? 'Bezirk nicht angegeben'
+                        : 'Bezirk ${workDay.districtId}',
+                    packageText: '${workDay.deliveredPackageCount} Pakete',
+                    secondaryText: workDay.cancelledPackageCount > 0
+                        ? '${workDay.cancelledPackageCount} abgebrochen'
+                        : null,
+                  ),
+                ],
+                if (supportEntries.isNotEmpty) ...[
+                  const SizedBox(height: 12),
+                  Text(
+                    'Unterstützungen',
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.bold,
+                        ),
+                  ),
+                  const SizedBox(height: 10),
+                  for (final entry in supportEntries) ...[
+                    _TourDetailCard(
+                      icon: Icons.group_outlined,
+                      title: 'Bezirk ${entry.district}',
+                      packageText: '${entry.packagesTaken} Pakete übernommen',
+                      secondaryText: entry.note,
+                    ),
+                    const SizedBox(height: 8),
+                  ],
+                ],
+                const SizedBox(height: 12),
+                Text(
+                  'Werbung',
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.bold,
                       ),
+                ),
+                const SizedBox(height: 10),
+                _DetailInfoCard(
+                  icon: Icons.campaign_outlined,
+                  title: workDay.hasAdvertising
+                      ? (workDay.advertising?.trim().isNotEmpty == true
+                          ? workDay.advertising!.trim()
+                          : 'Werbung dabei')
+                      : 'Keine Werbung',
+                ),
+                if (workDay.notes?.trim().isNotEmpty == true) ...[
+                  const SizedBox(height: 12),
+                  Text(
+                    'Bemerkungen',
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.bold,
+                        ),
+                  ),
+                  const SizedBox(height: 10),
+                  _DetailInfoCard(
+                    icon: Icons.notes_outlined,
+                    title: workDay.notes!.trim(),
+                  ),
+                ],
+              ],
+              const SizedBox(height: 24),
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton.icon(
+                  onPressed: () {
+                    Navigator.of(context).pop(
+                      _WorkDayAction.edit,
+                    );
+                  },
+                  icon: const Icon(Icons.edit_outlined),
+                  label: const Text('Bearbeiten'),
+                ),
               ),
               const SizedBox(height: 8),
-              _SheetInfoRow(
-                label: 'Eigene Pakete',
-                value: '${workDay.deliveredPackageCount}',
+              SizedBox(
+                width: double.infinity,
+                child: TextButton.icon(
+                  onPressed: () {
+                    Navigator.of(context).pop(
+                      _WorkDayAction.delete,
+                    );
+                  },
+                  icon: const Icon(Icons.delete_outline),
+                  label: const Text('Löschen'),
+                ),
               ),
             ],
-            const SizedBox(height: 24),
-            SizedBox(
-              width: double.infinity,
-              child: FilledButton.icon(
-                onPressed: () {
-                  Navigator.of(context).pop(
-                    _WorkDayAction.edit,
-                  );
-                },
-                icon: const Icon(Icons.edit_outlined),
-                label: const Text('Bearbeiten'),
-              ),
-            ),
-            const SizedBox(height: 8),
-            SizedBox(
-              width: double.infinity,
-              child: TextButton.icon(
-                onPressed: () {
-                  Navigator.of(context).pop(
-                    _WorkDayAction.delete,
-                  );
-                },
-                icon: const Icon(Icons.delete_outline),
-                label: const Text('Löschen'),
-              ),
-            ),
-          ],
+          ),
         ),
       ),
     );
@@ -889,9 +986,11 @@ class _ExistingWorkDaySheet extends StatelessWidget {
           return 'Paketfahrer / Unterstützung';
         }
 
-        return workDay.districtId == null
-            ? 'Arbeit'
-            : 'Bezirk ${workDay.districtId}';
+        if (workDay.districtId == null) {
+          return 'Arbeit';
+        }
+
+        return 'Eigene Zustellung';
 
       case WorkDayType.free:
         return 'Frei';
@@ -905,6 +1004,113 @@ class _ExistingWorkDaySheet extends StatelessWidget {
       case WorkDayType.sick:
         return 'Krank';
     }
+  }
+}
+
+class _TourDetailCard extends StatelessWidget {
+  const _TourDetailCard({
+    required this.icon,
+    required this.title,
+    required this.packageText,
+    this.secondaryText,
+  });
+
+  final IconData icon;
+  final String title;
+  final String packageText;
+  final String? secondaryText;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: Theme.of(context).colorScheme.outlineVariant,
+        ),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(
+            icon,
+            size: 22,
+            color: Theme.of(context).colorScheme.primary,
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                        fontWeight: FontWeight.bold,
+                      ),
+                ),
+                const SizedBox(height: 3),
+                Text(packageText),
+                if (secondaryText?.trim().isNotEmpty == true) ...[
+                  const SizedBox(height: 3),
+                  Text(
+                    secondaryText!.trim(),
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color:
+                              Theme.of(context).colorScheme.onSurfaceVariant,
+                        ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _DetailInfoCard extends StatelessWidget {
+  const _DetailInfoCard({
+    required this.icon,
+    required this.title,
+  });
+
+  final IconData icon;
+  final String title;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: Theme.of(context).colorScheme.outlineVariant,
+        ),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(
+            icon,
+            size: 22,
+            color: Theme.of(context).colorScheme.primary,
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              title,
+              style: Theme.of(context).textTheme.bodyLarge,
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }
 

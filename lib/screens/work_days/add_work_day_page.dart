@@ -6,6 +6,7 @@ import '../../models/district.dart';
 import '../../models/own_tour_entry.dart';
 import '../../models/support_entry.dart';
 import '../../models/work_day.dart';
+import '../../services/advertising_provider.dart';
 import '../../services/district_provider.dart';
 import '../../services/work_day_provider.dart';
 
@@ -228,6 +229,9 @@ class _AddWorkDayPageState extends ConsumerState<AddWorkDayPage> {
     BuildContext context,
     List<District> districts,
   ) {
+    final advertisingsAsync =
+        ref.watch(advertisingProvider);
+
     final isWorkDay =
         _type == WorkDayType.work;
 
@@ -543,17 +547,84 @@ class _AddWorkDayPageState extends ConsumerState<AddWorkDayPage> {
                 if (_hasAdvertising) ...[
                   const SizedBox(height: 8),
 
-                  TextField(
-                    controller:
-                        _advertisingController,
-                    decoration: const InputDecoration(
-                      labelText:
-                          'Welche Werbung?',
-                      hintText:
-                          'z. B. Einkauf Aktuell',
-                      border:
-                          OutlineInputBorder(),
+                  advertisingsAsync.when(
+                    loading: () => const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 12),
+                      child: Center(
+                        child: CircularProgressIndicator(),
+                      ),
                     ),
+                    error: (error, stackTrace) => TextField(
+                      controller: _advertisingController,
+                      decoration: const InputDecoration(
+                        labelText: 'Welche Werbung?',
+                        hintText: 'z. B. Einkauf Aktuell',
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                    data: (advertisings) {
+                      const otherValue = '__other__';
+                      final currentText =
+                          _advertisingController.text.trim();
+                      final savedNames = advertisings
+                          .map((item) => item.name)
+                          .toList();
+
+                      final selectedValue =
+                          savedNames.contains(currentText)
+                              ? currentText
+                              : currentText.isNotEmpty
+                                  ? otherValue
+                                  : null;
+
+                      return Column(
+                        children: [
+                          DropdownButtonFormField<String>(
+                            initialValue: selectedValue,
+                            decoration: const InputDecoration(
+                              labelText: 'Welche Werbung?',
+                              border: OutlineInputBorder(),
+                            ),
+                            items: [
+                              ...savedNames.map(
+                                (name) => DropdownMenuItem<String>(
+                                  value: name,
+                                  child: Text(name),
+                                ),
+                              ),
+                              const DropdownMenuItem<String>(
+                                value: otherValue,
+                                child: Text('Andere Werbung'),
+                              ),
+                            ],
+                            onChanged: (value) {
+                              setState(() {
+                                if (value == null) {
+                                  _advertisingController.clear();
+                                } else if (value == otherValue) {
+                                  _advertisingController.clear();
+                                } else {
+                                  _advertisingController.text = value;
+                                }
+                              });
+                            },
+                          ),
+                          if (selectedValue == otherValue ||
+                              (selectedValue == null &&
+                                  savedNames.isEmpty)) ...[
+                            const SizedBox(height: 12),
+                            TextField(
+                              controller: _advertisingController,
+                              decoration: const InputDecoration(
+                                labelText: 'Andere Werbung',
+                                hintText: 'Name der Werbung',
+                                border: OutlineInputBorder(),
+                              ),
+                            ),
+                          ],
+                        ],
+                      );
+                    },
                   ),
                 ],
               ],

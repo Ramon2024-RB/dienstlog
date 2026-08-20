@@ -299,6 +299,13 @@ class _CalendarContent extends StatelessWidget {
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
       children: [
+        const _CalendarIntroCard(),
+        const SizedBox(height: 20),
+        const _CalendarSectionTitle(
+          icon: Icons.calendar_month_outlined,
+          title: 'Monatskalender',
+        ),
+        const SizedBox(height: 10),
         _MonthHeader(
           visibleMonth: visibleMonth,
           onPreviousMonth: onPreviousMonth,
@@ -342,6 +349,89 @@ class _CalendarContent extends StatelessWidget {
         ),
         const SizedBox(height: 20),
         const _Legend(),
+      ],
+    );
+  }
+}
+
+class _CalendarIntroCard extends StatelessWidget {
+  const _CalendarIntroCard();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.primaryContainer,
+        borderRadius: BorderRadius.circular(22),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 48,
+            height: 48,
+            decoration: BoxDecoration(
+              color: Theme.of(context).colorScheme.surface,
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: Icon(
+              Icons.calendar_today_outlined,
+              color: Theme.of(context).colorScheme.primary,
+            ),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Deine Arbeitstage',
+                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                        fontWeight: FontWeight.bold,
+                      ),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  'Alle eingetragenen Arbeitstage und Abwesenheiten auf einen Blick.',
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _CalendarSectionTitle extends StatelessWidget {
+  const _CalendarSectionTitle({
+    required this.icon,
+    required this.title,
+  });
+
+  final IconData icon;
+  final String title;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Icon(
+          icon,
+          size: 20,
+          color: Theme.of(context).colorScheme.primary,
+        ),
+        const SizedBox(width: 8),
+        Text(
+          title,
+          style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.bold,
+              ),
+        ),
       ],
     );
   }

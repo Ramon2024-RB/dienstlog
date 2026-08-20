@@ -185,30 +185,10 @@ class _StatisticsPageState
         40,
       ),
       children: [
-        Text(
-          'Auswertung',
-          style: Theme.of(context)
-              .textTheme
-              .headlineMedium
-              ?.copyWith(
-                fontWeight: FontWeight.bold,
-              ),
-        ),
-
-        const SizedBox(height: 6),
-
-        Text(
-          _periodDescription(
-            dateRange,
-          ),
-          style: Theme.of(context)
-              .textTheme
-              .bodyLarge
-              ?.copyWith(
-                color: Theme.of(context)
-                    .colorScheme
-                    .onSurfaceVariant,
-              ),
+        _StatisticsHero(
+          period: _periodDescription(dateRange),
+          workDayCount: filteredWorkDays.length,
+          totalWorkMinutes: totalWorkMinutes,
         ),
 
         const SizedBox(height: 20),
@@ -491,6 +471,74 @@ class _StatisticsPageState
     ];
 
     return months[month - 1];
+  }
+}
+
+class _StatisticsHero extends StatelessWidget {
+  const _StatisticsHero({
+    required this.period,
+    required this.workDayCount,
+    required this.totalWorkMinutes,
+  });
+
+  final String period;
+  final int workDayCount;
+  final int totalWorkMinutes;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.primaryContainer,
+        borderRadius: BorderRadius.circular(22),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 48,
+            height: 48,
+            decoration: BoxDecoration(
+              color: Theme.of(context).colorScheme.surface,
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: Icon(
+              Icons.bar_chart_outlined,
+              color: Theme.of(context).colorScheme.primary,
+            ),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Deine Auswertung',
+                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                        fontWeight: FontWeight.bold,
+                      ),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  period,
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  '$workDayCount Arbeitstage · ${_formatDuration(totalWorkMinutes)}',
+                  style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                        fontWeight: FontWeight.w600,
+                      ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }
 

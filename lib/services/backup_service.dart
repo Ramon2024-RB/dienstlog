@@ -49,8 +49,6 @@ class BackupService {
     await SharePlus.instance.share(
       ShareParams(
         subject: 'TourLog Backup',
-        text:
-            'TourLog-Datensicherung. Bewahre diese Datei sicher auf.',
         files: [
           XFile(
             path,

@@ -1,6 +1,7 @@
 import 'package:path/path.dart';
 import 'package:sqflite/sqflite.dart';
 
+import '../models/advertising.dart';
 import '../models/district.dart';
 import '../models/own_tour_entry.dart';
 import '../models/support_entry.dart';
@@ -15,7 +16,7 @@ class AppDatabase {
   static Database? _database;
 
   static const String _databaseName = 'dienstlog.db';
-  static const int _databaseVersion = 5;
+  static const int _databaseVersion = 6;
 
   Future<Database> get database async {
     if (_database != null) {
@@ -50,6 +51,7 @@ class AppDatabase {
     await _createOwnTourEntriesTable(db);
     await _createWorkScheduleEntriesTable(db);
     await _createWorkTimeSettingsTable(db);
+    await _createAdvertisingTable(db);
 
     await _insertInitialDistricts(db);
   }
@@ -73,6 +75,10 @@ class AppDatabase {
 
     if (oldVersion < 5) {
       await _upgradeFromVersion4ToVersion5(db);
+    }
+
+    if (oldVersion < 6) {
+      await _upgradeFromVersion5ToVersion6(db);
     }
   }
 
@@ -175,6 +181,17 @@ class AppDatabase {
         start_minutes INTEGER,
         end_minutes INTEGER,
         break_minutes INTEGER
+      )
+      ''',
+    );
+  }
+
+  Future<void> _createAdvertisingTable(Database db) async {
+    await db.execute(
+      '''
+      CREATE TABLE advertising (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL UNIQUE
       )
       ''',
     );
@@ -293,6 +310,10 @@ class AppDatabase {
 
   Future<void> _upgradeFromVersion4ToVersion5(Database db) async {
     await _createWorkTimeSettingsTable(db);
+  }
+
+  Future<void> _upgradeFromVersion5ToVersion6(Database db) async {
+    await _createAdvertisingTable(db);
   }
 
   Future<void> _insertInitialDistricts(Database db) async {
@@ -1033,6 +1054,49 @@ class AppDatabase {
     );
   }
 
+  Future<List<Advertising>> getAdvertisings() async {
+    final db = await database;
+
+    final maps = await db.query(
+      'advertising',
+      orderBy: 'name COLLATE NOCASE ASC',
+    );
+
+    return maps.map(Advertising.fromMap).toList();
+  }
+
+  Future<void> insertAdvertising(Advertising advertising) async {
+    final db = await database;
+
+    await db.insert(
+      'advertising',
+      advertising.toMap(),
+      conflictAlgorithm: ConflictAlgorithm.abort,
+    );
+  }
+
+  Future<void> updateAdvertising(Advertising advertising) async {
+    final db = await database;
+
+    await db.update(
+      'advertising',
+      advertising.toMap(),
+      where: 'id = ?',
+      whereArgs: [advertising.id],
+      conflictAlgorithm: ConflictAlgorithm.abort,
+    );
+  }
+
+  Future<void> deleteAdvertising(String id) async {
+    final db = await database;
+
+    await db.delete(
+      'advertising',
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+  }
+
   Future<Map<String, Object?>> exportBackupData() async {
     final db = await database;
 
@@ -1064,6 +1128,10 @@ class AppDatabase {
         'work_time_settings': await db.query(
           'work_time_settings',
           orderBy: 'weekday ASC',
+        ),
+        'advertising': await db.query(
+          'advertising',
+          orderBy: 'name COLLATE NOCASE ASC',
         ),
       },
     };
@@ -1135,6 +1203,9 @@ class AppDatabase {
         readRows('work_schedule_entries');
     final workTimeSettings =
         readRows('work_time_settings');
+    final advertising = tables['advertising'] is List
+        ? readRows('advertising')
+        : <Map<String, Object?>>[];
 
     final db = await database;
 
@@ -1144,6 +1215,7 @@ class AppDatabase {
       await txn.delete('work_days');
       await txn.delete('work_schedule_entries');
       await txn.delete('work_time_settings');
+      await txn.delete('advertising');
       await txn.delete('districts');
 
       for (final row in districts) {
@@ -1189,6 +1261,14 @@ class AppDatabase {
       for (final row in workTimeSettings) {
         await txn.insert(
           'work_time_settings',
+          row,
+          conflictAlgorithm: ConflictAlgorithm.replace,
+        );
+      }
+
+      for (final row in advertising) {
+        await txn.insert(
+          'advertising',
           row,
           conflictAlgorithm: ConflictAlgorithm.replace,
         );

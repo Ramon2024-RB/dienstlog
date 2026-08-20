@@ -11,7 +11,10 @@ import 'screens/calendar/calendar_page.dart';
 import 'screens/quick_entry/quick_entry_card.dart';
 import 'screens/districts/districts_page.dart';
 import 'screens/statistics/statistics_page.dart';
+import 'screens/settings/advertising_page.dart';
 import 'screens/settings/settings_page.dart';
+import 'screens/settings/work_times_page.dart';
+import 'screens/settings/backup_page.dart';
 import 'screens/work_schedule/work_schedule_page.dart';
 import 'screens/work_days/add_work_day_page.dart';
 import 'services/work_day_provider.dart';
@@ -48,6 +51,15 @@ class TourLogApp extends StatelessWidget {
           brightness: Brightness.light,
         ),
         useMaterial3: true,
+        cardTheme: const CardThemeData(
+          margin: EdgeInsets.zero,
+          clipBehavior: Clip.antiAlias,
+        ),
+        inputDecorationTheme: InputDecorationTheme(
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+        ),
       ),
       darkTheme: ThemeData(
         colorScheme: ColorScheme.fromSeed(
@@ -55,6 +67,15 @@ class TourLogApp extends StatelessWidget {
           brightness: Brightness.dark,
         ),
         useMaterial3: true,
+        cardTheme: const CardThemeData(
+          margin: EdgeInsets.zero,
+          clipBehavior: Clip.antiAlias,
+        ),
+        inputDecorationTheme: InputDecorationTheme(
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+        ),
       ),
       themeMode: ThemeMode.system,
       home: const MainNavigationPage(),
@@ -370,21 +391,10 @@ class _OverviewContent extends ConsumerWidget {
         32,
       ),
       children: [
-        Text(
-          'Übersicht',
-          style: Theme.of(context)
-              .textTheme
-              .headlineMedium
-              ?.copyWith(
-                fontWeight: FontWeight.bold,
-              ),
+        _OverviewHero(
+          todayWorkDay: todayWorkDay,
         ),
-        const SizedBox(height: 8),
-        Text(
-          'Dein heutiger Arbeitstag auf einen Blick.',
-          style: Theme.of(context).textTheme.bodyLarge,
-        ),
-        const SizedBox(height: 24),
+        const SizedBox(height: 20),
 
         QuickEntryCard(
           workDay: todayWorkDay,
@@ -393,13 +403,25 @@ class _OverviewContent extends ConsumerWidget {
               onExternalQuickActionHandled,
         ),
 
-        const SizedBox(height: 16),
+        const SizedBox(height: 24),
+
+        const _OverviewSectionTitle(
+          title: 'Heute',
+          icon: Icons.today_outlined,
+        ),
+        const SizedBox(height: 10),
 
         _TodayCard(
           workDay: todayWorkDay,
         ),
 
-        const SizedBox(height: 16),
+        const SizedBox(height: 24),
+
+        const _OverviewSectionTitle(
+          title: 'Wochenüberblick',
+          icon: Icons.insights_outlined,
+        ),
+        const SizedBox(height: 10),
 
         Row(
           children: [
@@ -476,6 +498,153 @@ class _OverviewContent extends ConsumerWidget {
       date.year,
       date.month,
       date.day,
+    );
+  }
+}
+
+class _OverviewHero extends StatelessWidget {
+  const _OverviewHero({
+    required this.todayWorkDay,
+  });
+
+  final WorkDay? todayWorkDay;
+
+  @override
+  Widget build(BuildContext context) {
+    final now = DateTime.now();
+    final weekday = _weekdayName(now.weekday);
+    final date =
+        '${now.day.toString().padLeft(2, '0')}.${now.month.toString().padLeft(2, '0')}.${now.year}';
+
+    final status = todayWorkDay == null
+        ? 'Noch kein Tag eingetragen'
+        : _statusLabel(todayWorkDay!.type);
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.primaryContainer,
+        borderRadius: BorderRadius.circular(24),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 54,
+            height: 54,
+            decoration: BoxDecoration(
+              color: Theme.of(context).colorScheme.surface,
+              borderRadius: BorderRadius.circular(18),
+            ),
+            child: Icon(
+              Icons.local_shipping_outlined,
+              color: Theme.of(context).colorScheme.primary,
+              size: 28,
+            ),
+          ),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '$weekday, $date',
+                  style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                        color: Theme.of(context)
+                            .colorScheme
+                            .onPrimaryContainer,
+                      ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Dein TourLog',
+                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                        fontWeight: FontWeight.bold,
+                        color: Theme.of(context)
+                            .colorScheme
+                            .onPrimaryContainer,
+                      ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  status,
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        color: Theme.of(context)
+                            .colorScheme
+                            .onPrimaryContainer,
+                      ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  static String _weekdayName(int weekday) {
+    switch (weekday) {
+      case DateTime.monday:
+        return 'Montag';
+      case DateTime.tuesday:
+        return 'Dienstag';
+      case DateTime.wednesday:
+        return 'Mittwoch';
+      case DateTime.thursday:
+        return 'Donnerstag';
+      case DateTime.friday:
+        return 'Freitag';
+      case DateTime.saturday:
+        return 'Samstag';
+      case DateTime.sunday:
+        return 'Sonntag';
+      default:
+        return '';
+    }
+  }
+
+  static String _statusLabel(WorkDayType type) {
+    switch (type) {
+      case WorkDayType.work:
+        return 'Arbeitstag eingetragen';
+      case WorkDayType.free:
+        return 'Heute hast du frei';
+      case WorkDayType.vacation:
+        return 'Heute ist Urlaub';
+      case WorkDayType.holiday:
+        return 'Heute ist Feiertag';
+      case WorkDayType.sick:
+        return 'Heute bist du krank eingetragen';
+    }
+  }
+}
+
+class _OverviewSectionTitle extends StatelessWidget {
+  const _OverviewSectionTitle({
+    required this.title,
+    required this.icon,
+  });
+
+  final String title;
+  final IconData icon;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Icon(
+          icon,
+          size: 20,
+          color: Theme.of(context).colorScheme.primary,
+        ),
+        const SizedBox(width: 8),
+        Text(
+          title,
+          style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.bold,
+              ),
+        ),
+      ],
     );
   }
 }
@@ -1167,6 +1336,7 @@ class _SummaryCard extends StatelessWidget {
     BuildContext context,
   ) {
     return Card(
+      clipBehavior: Clip.antiAlias,
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
@@ -1276,7 +1446,60 @@ class _MorePage extends StatelessWidget {
                   trailing: const Icon(
                     Icons.chevron_right,
                   ),
-                  onTap: () {},
+                  onTap: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute<void>(
+                        builder: (context) =>
+                            const AdvertisingPage(),
+                      ),
+                    );
+                  },
+                ),
+                const Divider(height: 1),
+                ListTile(
+                  leading: const Icon(
+                    Icons.schedule_outlined,
+                  ),
+                  title: const Text(
+                    'Arbeitszeiten',
+                  ),
+                  subtitle: const Text(
+                    'Sollzeiten und Pausen verwalten',
+                  ),
+                  trailing: const Icon(
+                    Icons.chevron_right,
+                  ),
+                  onTap: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute<void>(
+                        builder: (context) =>
+                            const WorkTimesPage(),
+                      ),
+                    );
+                  },
+                ),
+                const Divider(height: 1),
+                ListTile(
+                  leading: const Icon(
+                    Icons.backup_outlined,
+                  ),
+                  title: const Text(
+                    'Daten & Backup',
+                  ),
+                  subtitle: const Text(
+                    'Daten exportieren und wiederherstellen',
+                  ),
+                  trailing: const Icon(
+                    Icons.chevron_right,
+                  ),
+                  onTap: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute<void>(
+                        builder: (context) =>
+                            const BackupPage(),
+                      ),
+                    );
+                  },
                 ),
                 const Divider(height: 1),
                 ListTile(
@@ -1287,7 +1510,7 @@ class _MorePage extends StatelessWidget {
                     'Einstellungen',
                   ),
                   subtitle: const Text(
-                    'Arbeitszeiten und App-Einstellungen',
+                    'Allgemeine App-Einstellungen',
                   ),
                   trailing: const Icon(
                     Icons.chevron_right,

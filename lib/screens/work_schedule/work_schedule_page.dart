@@ -163,18 +163,19 @@ class _WorkSchedulePageState
         32,
       ),
       children: [
-        Text(
-          'Plane hier deine voraussichtlichen Einsätze.',
-          style: Theme.of(context)
-              .textTheme
-              .bodyLarge
-              ?.copyWith(
-                color: Theme.of(context)
-                    .colorScheme
-                    .onSurfaceVariant,
-              ),
+        _PageIntroCard(
+          icon: Icons.event_note_outlined,
+          title: 'Dein Arbeitsplan',
+          subtitle: _isMultiSelectMode
+              ? 'Wähle mehrere Tage aus und plane sie gemeinsam.'
+              : 'Plane hier deine voraussichtlichen Einsätze.',
         ),
         const SizedBox(height: 20),
+        const _SectionTitle(
+          icon: Icons.calendar_month_outlined,
+          title: 'Monatsplan',
+        ),
+        const SizedBox(height: 10),
         Card(
           clipBehavior: Clip.antiAlias,
           child: Padding(
@@ -553,6 +554,97 @@ class _WorkSchedulePageState
     return first.year == second.year &&
         first.month == second.month &&
         first.day == second.day;
+  }
+}
+
+class _PageIntroCard extends StatelessWidget {
+  const _PageIntroCard({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+  });
+
+  final IconData icon;
+  final String title;
+  final String subtitle;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.primaryContainer,
+        borderRadius: BorderRadius.circular(22),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 48,
+            height: 48,
+            decoration: BoxDecoration(
+              color: Theme.of(context).colorScheme.surface,
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: Icon(
+              icon,
+              color: Theme.of(context).colorScheme.primary,
+            ),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                        fontWeight: FontWeight.bold,
+                      ),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  subtitle,
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SectionTitle extends StatelessWidget {
+  const _SectionTitle({
+    required this.icon,
+    required this.title,
+  });
+
+  final IconData icon;
+  final String title;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Icon(
+          icon,
+          size: 20,
+          color: Theme.of(context).colorScheme.primary,
+        ),
+        const SizedBox(width: 8),
+        Text(
+          title,
+          style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.bold,
+              ),
+        ),
+      ],
+    );
   }
 }
 

@@ -518,7 +518,7 @@ class _OverviewHero extends StatelessWidget {
 
     final status = todayWorkDay == null
         ? 'Noch kein Tag eingetragen'
-        : _statusLabel(todayWorkDay!.type);
+        : _statusLabel(todayWorkDay!);
 
     return Container(
       width: double.infinity,
@@ -603,16 +603,36 @@ class _OverviewHero extends StatelessWidget {
     }
   }
 
-  static String _statusLabel(WorkDayType type) {
-    switch (type) {
+  static String _statusLabel(WorkDay workDay) {
+    switch (workDay.type) {
       case WorkDayType.work:
+        if (workDay.workEnd != null) {
+          return 'Dienst beendet · ${_formatTime(workDay.workEnd!)} Uhr';
+        }
+
+        if (workDay.deliveryEnd != null) {
+          return 'Zustellung beendet · ${_formatTime(workDay.deliveryEnd!)} Uhr';
+        }
+
+        if (workDay.departureTime != null) {
+          return 'In Zustellung seit ${_formatTime(workDay.departureTime!)} Uhr';
+        }
+
+        if (workDay.workStart != null) {
+          return 'Im Dienst seit ${_formatTime(workDay.workStart!)} Uhr';
+        }
+
         return 'Arbeitstag eingetragen';
+
       case WorkDayType.free:
         return 'Heute hast du frei';
+
       case WorkDayType.vacation:
         return 'Heute ist Urlaub';
+
       case WorkDayType.holiday:
         return 'Heute ist Feiertag';
+
       case WorkDayType.sick:
         return 'Heute bist du krank eingetragen';
     }
@@ -823,6 +843,18 @@ class _TodayCard extends ConsumerWidget {
 
                 const SizedBox(height: 20),
 
+                _TodayStatusBanner(
+                  workDay: workDay!,
+                ),
+
+                const SizedBox(height: 16),
+
+                _TodayTimeGrid(
+                  workDay: workDay!,
+                ),
+
+                const SizedBox(height: 16),
+
                 _TodayInfoRow(
                   label: 'Arbeitszeit',
                   value:
@@ -884,16 +916,36 @@ class _TodayCard extends ConsumerWidget {
 
                 if (workDay!.assignmentType ==
                     WorkAssignmentType.ownDistrict) ...[
-                  const SizedBox(height: 10),
-                  _TodayInfoRow(
-                    label: 'Gefahrene Bezirke',
-                    value: _districtCountLabel(
-                      ownTours,
-                    ),
+                  const SizedBox(height: 16),
+                  Text(
+                    'Bezirke & Pakete',
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.bold,
+                        ),
                   ),
                   const SizedBox(height: 10),
+                  if (ownTours.isNotEmpty)
+                    for (final entry in ownTours) ...[
+                      _TodayTourRow(
+                        district: entry.district,
+                        districtPart: entry.districtPart,
+                        packages: entry.packageCount,
+                        cancelledPackages:
+                            entry.cancelledPackageCount,
+                      ),
+                      const SizedBox(height: 8),
+                    ]
+                  else
+                    _TodayTourRow(
+                      district: workDay!.districtId ?? '–',
+                      districtPart: workDay!.districtPart,
+                      packages: workDay!.deliveredPackageCount,
+                      cancelledPackages:
+                          workDay!.cancelledPackageCount,
+                    ),
+                  const SizedBox(height: 10),
                   _TodayInfoRow(
-                    label: 'Eigene Pakete',
+                    label: 'Eigene Pakete gesamt',
                     value: '$ownPackages Pakete',
                   ),
                 ],
@@ -911,6 +963,49 @@ class _TodayCard extends ConsumerWidget {
                   label: 'Gesamt zugestellt',
                   value: '$totalDelivered Pakete',
                   emphasize: true,
+                ),
+
+                const SizedBox(height: 16),
+
+                _TodayDetailBox(
+                  icon: Icons.campaign_outlined,
+                  label: 'Werbung',
+                  value: workDay!.hasAdvertising
+                      ? (workDay!.advertising?.trim().isNotEmpty == true
+                          ? workDay!.advertising!.trim()
+                          : 'Werbung dabei')
+                      : 'Keine Werbung',
+                ),
+
+                if (workDay!.notes?.trim().isNotEmpty == true) ...[
+                  const SizedBox(height: 10),
+                  _TodayDetailBox(
+                    icon: Icons.notes_outlined,
+                    label: 'Bemerkungen',
+                    value: workDay!.notes!.trim(),
+                  ),
+                ],
+
+                const SizedBox(height: 16),
+
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    onPressed: () async {
+                      await Navigator.of(context).push<bool>(
+                        MaterialPageRoute<bool>(
+                          builder: (context) {
+                            return AddWorkDayPage(
+                              initialDate: workDay!.date,
+                              existingWorkDay: workDay,
+                            );
+                          },
+                        ),
+                      );
+                    },
+                    icon: const Icon(Icons.edit_outlined),
+                    label: const Text('Heutigen Arbeitstag bearbeiten'),
+                  ),
                 ),
               ],
             ),
@@ -1023,20 +1118,6 @@ class _TodayCard extends ConsumerWidget {
     );
   }
 
-  static String _districtCountLabel(
-    List<OwnTourEntry> ownTours,
-  ) {
-    if (ownTours.isEmpty) {
-      return '–';
-    }
-
-    if (ownTours.length == 1) {
-      return '1';
-    }
-
-    return '${ownTours.length}';
-  }
-
   static String _districtPartLabel(
     DistrictPart part,
   ) {
@@ -1092,6 +1173,330 @@ class _TodayCard extends ConsumerWidget {
       case WorkDayType.sick:
         return 'Krank';
     }
+  }
+}
+
+class _TodayStatusBanner extends StatelessWidget {
+  const _TodayStatusBanner({
+    required this.workDay,
+  });
+
+  final WorkDay workDay;
+
+  @override
+  Widget build(BuildContext context) {
+    final (icon, text) = _status();
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(
+        horizontal: 14,
+        vertical: 12,
+      ),
+      decoration: BoxDecoration(
+        color: Theme.of(context)
+            .colorScheme
+            .primaryContainer
+            .withValues(alpha: 0.55),
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            icon,
+            color: Theme.of(context).colorScheme.primary,
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              text,
+              style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  (IconData, String) _status() {
+    if (workDay.workEnd != null) {
+      return (
+        Icons.check_circle_outline,
+        'Dienst beendet · ${_formatTime(workDay.workEnd!)} Uhr',
+      );
+    }
+
+    if (workDay.deliveryEnd != null) {
+      return (
+        Icons.inventory_2_outlined,
+        'Zustellung beendet · ${_formatTime(workDay.deliveryEnd!)} Uhr',
+      );
+    }
+
+    if (workDay.departureTime != null) {
+      return (
+        Icons.local_shipping_outlined,
+        'In Zustellung seit ${_formatTime(workDay.departureTime!)} Uhr',
+      );
+    }
+
+    if (workDay.workStart != null) {
+      return (
+        Icons.badge_outlined,
+        'Im Dienst seit ${_formatTime(workDay.workStart!)} Uhr',
+      );
+    }
+
+    return (
+      Icons.schedule_outlined,
+      'Arbeitstag vorbereitet',
+    );
+  }
+}
+
+class _TodayTimeGrid extends StatelessWidget {
+  const _TodayTimeGrid({
+    required this.workDay,
+  });
+
+  final WorkDay workDay;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: _TodayTimeBox(
+                label: 'Dienstbeginn',
+                value: _time(workDay.workStart),
+                icon: Icons.login,
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: _TodayTimeBox(
+                label: 'Zustellbeginn',
+                value: _time(workDay.departureTime),
+                icon: Icons.local_shipping_outlined,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 10),
+        Row(
+          children: [
+            Expanded(
+              child: _TodayTimeBox(
+                label: 'Zustellende',
+                value: _time(workDay.deliveryEnd),
+                icon: Icons.inventory_2_outlined,
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: _TodayTimeBox(
+                label: 'Dienstende',
+                value: _time(workDay.workEnd),
+                icon: Icons.logout,
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  static String _time(int? minutes) {
+    return minutes == null ? '–' : '${_formatTime(minutes)} Uhr';
+  }
+}
+
+class _TodayTimeBox extends StatelessWidget {
+  const _TodayTimeBox({
+    required this.label,
+    required this.value,
+    required this.icon,
+  });
+
+  final String label;
+  final String value;
+  final IconData icon;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Theme.of(context)
+            .colorScheme
+            .surfaceContainerHighest
+            .withValues(alpha: 0.45),
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(
+            icon,
+            size: 20,
+            color: Theme.of(context).colorScheme.primary,
+          ),
+          const SizedBox(height: 8),
+          Text(
+            label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: Theme.of(context).textTheme.labelMedium,
+          ),
+          const SizedBox(height: 3),
+          Text(
+            value,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                  fontWeight: FontWeight.bold,
+                ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _TodayTourRow extends StatelessWidget {
+  const _TodayTourRow({
+    required this.district,
+    required this.districtPart,
+    required this.packages,
+    required this.cancelledPackages,
+  });
+
+  final String district;
+  final DistrictPart districtPart;
+  final int packages;
+  final int cancelledPackages;
+
+  @override
+  Widget build(BuildContext context) {
+    final part = switch (districtPart) {
+      DistrictPart.full => 'Ganz',
+      DistrictPart.partA => 'A-Teil',
+      DistrictPart.partB => 'B-Teil',
+    };
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(
+        horizontal: 14,
+        vertical: 12,
+      ),
+      decoration: BoxDecoration(
+        color: Theme.of(context)
+            .colorScheme
+            .surfaceContainerHighest
+            .withValues(alpha: 0.4),
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            Icons.route_outlined,
+            color: Theme.of(context).colorScheme.primary,
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Bezirk $district · $part',
+                  style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                        fontWeight: FontWeight.bold,
+                      ),
+                ),
+                if (cancelledPackages > 0)
+                  Text(
+                    '$cancelledPackages Pakete abgebrochen',
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+              ],
+            ),
+          ),
+          Text(
+            '$packages',
+            style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.bold,
+                ),
+          ),
+          const SizedBox(width: 4),
+          Text(
+            'Pakete',
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _TodayDetailBox extends StatelessWidget {
+  const _TodayDetailBox({
+    required this.icon,
+    required this.label,
+    required this.value,
+  });
+
+  final IconData icon;
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Theme.of(context)
+            .colorScheme
+            .surfaceContainerHighest
+            .withValues(alpha: 0.35),
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(
+            icon,
+            color: Theme.of(context).colorScheme.primary,
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  label,
+                  style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                        color: Theme.of(context)
+                            .colorScheme
+                            .onSurfaceVariant,
+                      ),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  value,
+                  style: Theme.of(context).textTheme.bodyLarge,
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }
 

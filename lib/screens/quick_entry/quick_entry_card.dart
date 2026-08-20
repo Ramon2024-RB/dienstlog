@@ -156,6 +156,10 @@ class _QuickEntryCardState
                         .onSurfaceVariant,
                   ),
             ),
+            const SizedBox(height: 14),
+            _QuickProgressBanner(
+              workDay: currentWorkDay,
+            ),
             const SizedBox(height: 20),
 
             _QuickActionTile(
@@ -792,6 +796,89 @@ class _QuickEntryCardState
 enum _QuickTimeAction {
   workStart,
   workEnd,
+}
+
+class _QuickProgressBanner extends StatelessWidget {
+  const _QuickProgressBanner({
+    required this.workDay,
+  });
+
+  final WorkDay? workDay;
+
+  @override
+  Widget build(BuildContext context) {
+    final (icon, text) = _status();
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(
+        horizontal: 14,
+        vertical: 12,
+      ),
+      decoration: BoxDecoration(
+        color: Theme.of(context)
+            .colorScheme
+            .primaryContainer
+            .withValues(alpha: 0.45),
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            icon,
+            size: 20,
+            color: Theme.of(context).colorScheme.primary,
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              text,
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    fontWeight: FontWeight.w600,
+                  ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  (IconData, String) _status() {
+    final current = workDay;
+
+    if (current == null || current.workStart == null) {
+      return (
+        Icons.play_circle_outline,
+        'Nächster Schritt: Dienstbeginn erfassen',
+      );
+    }
+
+    if (current.departureTime == null) {
+      return (
+        Icons.route_outlined,
+        'Nächster Schritt: Zustellung starten',
+      );
+    }
+
+    if (current.deliveryEnd == null) {
+      return (
+        Icons.local_shipping_outlined,
+        'Zustellung läuft',
+      );
+    }
+
+    if (current.workEnd == null) {
+      return (
+        Icons.schedule_outlined,
+        'Nächster Schritt: Dienstende erfassen',
+      );
+    }
+
+    return (
+      Icons.check_circle_outline,
+      'Arbeitstag vollständig erfasst',
+    );
+  }
 }
 
 class _QuickActionTile extends StatelessWidget {

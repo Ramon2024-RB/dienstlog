@@ -901,6 +901,53 @@ class _AddWorkDayPageState extends ConsumerState<AddWorkDayPage> {
         _assignmentType ==
             WorkAssignmentType.ownDistrict;
 
+    if (isWorkDay) {
+      final workStartMinutes =
+          _timeToMinutes(_workStart);
+      final departureMinutes =
+          _timeToMinutes(_departureTime);
+      final deliveryEndMinutes =
+          _timeToMinutes(_deliveryEnd);
+      final workEndMinutes =
+          _timeToMinutes(_workEnd);
+
+      if (workStartMinutes != null &&
+          departureMinutes != null &&
+          departureMinutes < workStartMinutes) {
+        _showMessage(
+          'Die Abfahrt kann nicht vor dem Arbeitsbeginn liegen.',
+        );
+        return;
+      }
+
+      if (departureMinutes != null &&
+          deliveryEndMinutes != null &&
+          deliveryEndMinutes < departureMinutes) {
+        _showMessage(
+          'Das Zustellende kann nicht vor der Abfahrt liegen.',
+        );
+        return;
+      }
+
+      if (deliveryEndMinutes != null &&
+          workEndMinutes != null &&
+          workEndMinutes < deliveryEndMinutes) {
+        _showMessage(
+          'Das Arbeitsende kann nicht vor dem Zustellende liegen.',
+        );
+        return;
+      }
+
+      if (workStartMinutes != null &&
+          workEndMinutes != null &&
+          workEndMinutes < workStartMinutes) {
+        _showMessage(
+          'Das Arbeitsende kann nicht vor dem Arbeitsbeginn liegen.',
+        );
+        return;
+      }
+    }
+
     if (isWorkDay &&
         hasOwnDistrict &&
         _ownTourDrafts.isEmpty) {

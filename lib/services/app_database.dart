@@ -15,7 +15,7 @@ class AppDatabase {
   static Database? _database;
 
   static const String _databaseName = 'dienstlog.db';
-  static const int _databaseVersion = 4;
+  static const int _databaseVersion = 5;
 
   Future<Database> get database async {
     if (_database != null) {
@@ -49,6 +49,7 @@ class AppDatabase {
     await _createSupportEntriesTable(db);
     await _createOwnTourEntriesTable(db);
     await _createWorkScheduleEntriesTable(db);
+    await _createWorkTimeSettingsTable(db);
 
     await _insertInitialDistricts(db);
   }
@@ -68,6 +69,10 @@ class AppDatabase {
 
     if (oldVersion < 4) {
       await _upgradeFromVersion3ToVersion4(db);
+    }
+
+    if (oldVersion < 5) {
+      await _upgradeFromVersion4ToVersion5(db);
     }
   }
 
@@ -155,6 +160,21 @@ class AppDatabase {
         type TEXT NOT NULL,
         districts TEXT NOT NULL DEFAULT '',
         notes TEXT
+      )
+      ''',
+    );
+  }
+
+  Future<void> _createWorkTimeSettingsTable(
+    Database db,
+  ) async {
+    await db.execute(
+      '''
+      CREATE TABLE work_time_settings (
+        weekday INTEGER PRIMARY KEY,
+        start_minutes INTEGER,
+        end_minutes INTEGER,
+        break_minutes INTEGER
       )
       ''',
     );
@@ -269,6 +289,10 @@ class AppDatabase {
 
   Future<void> _upgradeFromVersion3ToVersion4(Database db) async {
     await _createWorkScheduleEntriesTable(db);
+  }
+
+  Future<void> _upgradeFromVersion4ToVersion5(Database db) async {
+    await _createWorkTimeSettingsTable(db);
   }
 
   Future<void> _insertInitialDistricts(Database db) async {
@@ -916,6 +940,96 @@ class AppDatabase {
       'work_schedule_entries',
       where: 'id = ?',
       whereArgs: [id],
+    );
+  }
+
+  Future<Map<int, Map<String, int?>>> getWorkTimeSettings() async {
+    final db = await database;
+
+    final maps = await db.query(
+      'work_time_settings',
+      orderBy: 'weekday ASC',
+    );
+
+    final result = <int, Map<String, int?>>{};
+
+    for (var weekday = DateTime.monday;
+        weekday <= DateTime.sunday;
+        weekday++) {
+      result[weekday] = {
+        'start_minutes': null,
+        'end_minutes': null,
+        'break_minutes': null,
+      };
+    }
+
+    for (final map in maps) {
+      final weekday = map['weekday'] as int;
+
+      result[weekday] = {
+        'start_minutes': map['start_minutes'] as int?,
+        'end_minutes': map['end_minutes'] as int?,
+        'break_minutes': map['break_minutes'] as int?,
+      };
+    }
+
+    return result;
+  }
+
+  Future<Map<String, int?>?> getWorkTimeSettingForWeekday(
+    int weekday,
+  ) async {
+    final db = await database;
+
+    final maps = await db.query(
+      'work_time_settings',
+      where: 'weekday = ?',
+      whereArgs: [weekday],
+      limit: 1,
+    );
+
+    if (maps.isEmpty) {
+      return null;
+    }
+
+    final map = maps.first;
+
+    return {
+      'start_minutes': map['start_minutes'] as int?,
+      'end_minutes': map['end_minutes'] as int?,
+      'break_minutes': map['break_minutes'] as int?,
+    };
+  }
+
+  Future<void> saveWorkTimeSetting({
+    required int weekday,
+    int? startMinutes,
+    int? endMinutes,
+    int? breakMinutes,
+  }) async {
+    final db = await database;
+
+    await db.insert(
+      'work_time_settings',
+      {
+        'weekday': weekday,
+        'start_minutes': startMinutes,
+        'end_minutes': endMinutes,
+        'break_minutes': breakMinutes,
+      },
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  Future<void> clearWorkTimeSetting(
+    int weekday,
+  ) async {
+    final db = await database;
+
+    await db.delete(
+      'work_time_settings',
+      where: 'weekday = ?',
+      whereArgs: [weekday],
     );
   }
 

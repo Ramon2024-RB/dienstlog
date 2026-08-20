@@ -11,9 +11,11 @@ import 'screens/calendar/calendar_page.dart';
 import 'screens/quick_entry/quick_entry_card.dart';
 import 'screens/districts/districts_page.dart';
 import 'screens/statistics/statistics_page.dart';
+import 'screens/settings/settings_page.dart';
 import 'screens/work_schedule/work_schedule_page.dart';
 import 'screens/work_days/add_work_day_page.dart';
 import 'services/work_day_provider.dart';
+import 'utils/work_time_balance_calculator.dart';
 
 void main() {
   runApp(
@@ -402,13 +404,9 @@ class _OverviewContent extends ConsumerWidget {
         Row(
           children: [
             Expanded(
-              child: _SummaryCard(
-                title: 'Diese Woche',
-                value: _formatDuration(
-                  weeklyWorkMinutes,
-                ),
-                subtitle: 'Arbeitszeit',
-                icon: Icons.access_time,
+              child: _WeeklyWorkTimeSummaryCard(
+                workDays: weekWorkDays,
+                workMinutes: weeklyWorkMinutes,
               ),
             ),
             const SizedBox(width: 12),
@@ -676,6 +674,45 @@ class _TodayCard extends ConsumerWidget {
                   ),
                 ),
 
+                const SizedBox(height: 10),
+
+                _TodayInfoRow(
+                  label: 'Soll',
+                  value: data?.targetMinutes == null
+                      ? '–'
+                      : _formatDuration(data!.targetMinutes!),
+                ),
+
+                const SizedBox(height: 10),
+
+                _TodayInfoRow(
+                  label: 'Differenz',
+                  value: data?.balanceMinutes == null
+                      ? '–'
+                      : WorkTimeBalanceCalculator.formatBalance(
+                          data!.balanceMinutes!,
+                        ),
+                  emphasize: data?.balanceMinutes != null,
+                ),
+
+                const SizedBox(height: 10),
+
+                _TodayInfoRow(
+                  label: 'Pause',
+                  value: _formatDuration(workDay!.breakMinutes),
+                ),
+
+                const SizedBox(height: 10),
+
+                _TodayInfoRow(
+                  label: 'Zustellzeit',
+                  value: workDay!.deliveryDurationMinutes == null
+                      ? '–'
+                      : _formatDuration(
+                          workDay!.deliveryDurationMinutes!,
+                        ),
+                ),
+
                 if (workDay!.assignmentType ==
                     WorkAssignmentType.ownDistrict) ...[
                   const SizedBox(height: 10),
@@ -737,15 +774,29 @@ class _TodayCard extends ConsumerWidget {
       workDay.id,
     );
 
+    final targetMinutesFuture =
+        WorkTimeBalanceCalculator.getTargetMinutesForDate(
+      workDay.date,
+    );
+
+    final balanceMinutesFuture =
+        WorkTimeBalanceCalculator.getBalanceMinutesForWorkDay(
+      workDay,
+    );
+
     final ownTours = await ownToursFuture;
     final ownPackages = await ownPackagesFuture;
     final supportPackages =
         await supportPackagesFuture;
+    final targetMinutes = await targetMinutesFuture;
+    final balanceMinutes = await balanceMinutesFuture;
 
     return _TodayWorkData(
       ownTours: ownTours,
       ownPackages: ownPackages,
       supportPackages: supportPackages,
+      targetMinutes: targetMinutes,
+      balanceMinutes: balanceMinutes,
     );
   }
 
@@ -880,11 +931,46 @@ class _TodayWorkData {
     required this.ownTours,
     required this.ownPackages,
     required this.supportPackages,
+    required this.targetMinutes,
+    required this.balanceMinutes,
   });
 
   final List<OwnTourEntry> ownTours;
   final int ownPackages;
   final int supportPackages;
+  final int? targetMinutes;
+  final int? balanceMinutes;
+}
+
+class _WeeklyWorkTimeSummaryCard extends StatelessWidget {
+  const _WeeklyWorkTimeSummaryCard({
+    required this.workDays,
+    required this.workMinutes,
+  });
+
+  final List<WorkDay> workDays;
+  final int workMinutes;
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<int>(
+      future: WorkTimeBalanceCalculator.getBalanceMinutesForWorkDays(
+        workDays,
+      ),
+      builder: (context, snapshot) {
+        final balance = snapshot.data;
+
+        return _SummaryCard(
+          title: 'Diese Woche',
+          value: _formatDuration(workMinutes),
+          subtitle: balance == null
+              ? 'Arbeitszeit'
+              : 'Arbeitszeit · ${WorkTimeBalanceCalculator.formatBalance(balance)}',
+          icon: Icons.access_time,
+        );
+      },
+    );
+  }
 }
 
 class _WeeklyOwnPackagesSummaryCard
@@ -1206,7 +1292,14 @@ class _MorePage extends StatelessWidget {
                   trailing: const Icon(
                     Icons.chevron_right,
                   ),
-                  onTap: () {},
+                  onTap: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute<void>(
+                        builder: (context) =>
+                            const SettingsPage(),
+                      ),
+                    );
+                  },
                 ),
               ],
             ),

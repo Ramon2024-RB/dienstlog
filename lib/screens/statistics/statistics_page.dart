@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../models/own_tour_entry.dart';
 import '../../models/work_day.dart';
 import '../../services/work_day_provider.dart';
+import '../../utils/work_time_balance_calculator.dart';
 
 enum StatisticsPeriod {
   week,
@@ -294,6 +295,12 @@ class _StatisticsPageState
 
         const SizedBox(height: 12),
 
+        _WorkTimeBalanceStatistics(
+          workDays: filteredWorkDays,
+        ),
+
+        const SizedBox(height: 12),
+
         Row(
           children: [
             Expanded(
@@ -484,6 +491,95 @@ class _StatisticsPageState
     ];
 
     return months[month - 1];
+  }
+}
+
+class _WorkTimeBalanceStatistics extends StatelessWidget {
+  const _WorkTimeBalanceStatistics({
+    required this.workDays,
+  });
+
+  final List<WorkDay> workDays;
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<List<int>>(
+      future: Future.wait<int>([
+        WorkTimeBalanceCalculator.getTargetMinutesForWorkDays(
+          workDays,
+        ),
+        WorkTimeBalanceCalculator
+            .getActualMinutesForComparableWorkDays(
+          workDays,
+        ),
+        WorkTimeBalanceCalculator.getBalanceMinutesForWorkDays(
+          workDays,
+        ),
+      ]),
+      builder: (context, snapshot) {
+        if (snapshot.hasError) {
+          return const _StatisticDetailCard(
+            icon: Icons.balance_outlined,
+            title: 'Plus / Minus',
+            value: '–',
+            description:
+                'Die Soll-Arbeitszeit konnte nicht berechnet werden.',
+          );
+        }
+
+        final values = snapshot.data;
+
+        if (values == null) {
+          return const _StatisticDetailCard(
+            icon: Icons.balance_outlined,
+            title: 'Plus / Minus',
+            value: '…',
+            description:
+                'Soll- und Ist-Arbeitszeit werden berechnet.',
+          );
+        }
+
+        final targetMinutes = values[0];
+        final actualMinutes = values[1];
+        final balanceMinutes = values[2];
+
+        return Column(
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: _StatisticCard(
+                    icon: Icons.flag_outlined,
+                    title: 'Sollzeit',
+                    value: _formatDuration(targetMinutes),
+                    subtitle: 'im Zeitraum',
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: _StatisticCard(
+                    icon: Icons.timelapse_outlined,
+                    title: 'Istzeit',
+                    value: _formatDuration(actualMinutes),
+                    subtitle: 'vergleichbar',
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            _StatisticDetailCard(
+              icon: Icons.balance_outlined,
+              title: 'Plus / Minus',
+              value: WorkTimeBalanceCalculator.formatBalance(
+                balanceMinutes,
+              ),
+              description:
+                  'Differenz zwischen deiner Soll- und tatsächlichen Arbeitszeit.',
+            ),
+          ],
+        );
+      },
+    );
   }
 }
 

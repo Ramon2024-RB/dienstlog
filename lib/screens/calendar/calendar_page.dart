@@ -844,8 +844,22 @@ class _ExistingWorkDaySheet extends StatelessWidget {
               ),
               if (isWorkDay) ...[
                 const SizedBox(height: 20),
+                Text(
+                  'Zeiten',
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.bold,
+                      ),
+                ),
+                const SizedBox(height: 10),
+                _WorkDayTimesCard(
+                  workStart: workDay.workStart,
+                  departureTime: workDay.departureTime,
+                  deliveryEnd: workDay.deliveryEnd,
+                  workEnd: workDay.workEnd,
+                ),
+                const SizedBox(height: 10),
                 _SheetInfoRow(
-                  label: 'Arbeitszeit',
+                  label: 'Arbeitszeit gesamt',
                   value: workDay.workDurationMinutes == null
                       ? '–'
                       : _formatDuration(
@@ -1004,6 +1018,100 @@ class _ExistingWorkDaySheet extends StatelessWidget {
       case WorkDayType.sick:
         return 'Krank';
     }
+  }
+}
+
+class _WorkDayTimesCard extends StatelessWidget {
+  const _WorkDayTimesCard({
+    required this.workStart,
+    required this.departureTime,
+    required this.deliveryEnd,
+    required this.workEnd,
+  });
+
+  final int? workStart;
+  final int? departureTime;
+  final int? deliveryEnd;
+  final int? workEnd;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: Theme.of(context).colorScheme.outlineVariant,
+        ),
+      ),
+      child: Column(
+        children: [
+          _WorkDayTimeRow(
+            icon: Icons.login_outlined,
+            label: 'Arbeitsbeginn',
+            minutes: workStart,
+          ),
+          const SizedBox(height: 12),
+          _WorkDayTimeRow(
+            icon: Icons.local_shipping_outlined,
+            label: 'Zustellungsbeginn',
+            minutes: departureTime,
+          ),
+          const SizedBox(height: 12),
+          _WorkDayTimeRow(
+            icon: Icons.inventory_2_outlined,
+            label: 'Zustellungsende',
+            minutes: deliveryEnd,
+          ),
+          const SizedBox(height: 12),
+          _WorkDayTimeRow(
+            icon: Icons.logout_outlined,
+            label: 'Arbeitsende',
+            minutes: workEnd,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _WorkDayTimeRow extends StatelessWidget {
+  const _WorkDayTimeRow({
+    required this.icon,
+    required this.label,
+    required this.minutes,
+  });
+
+  final IconData icon;
+  final String label;
+  final int? minutes;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Icon(
+          icon,
+          size: 20,
+          color: Theme.of(context).colorScheme.primary,
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Text(
+            label,
+            style: Theme.of(context).textTheme.bodyMedium,
+          ),
+        ),
+        Text(
+          _formatClockTime(minutes),
+          style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                fontWeight: FontWeight.w700,
+              ),
+        ),
+      ],
+    );
   }
 }
 
@@ -1278,6 +1386,18 @@ String _formatDuration(int minutes) {
   final remainingMinutes = minutes % 60;
 
   return '$hours h ${remainingMinutes.toString().padLeft(2, '0')} min';
+}
+
+String _formatClockTime(int? minutes) {
+  if (minutes == null) {
+    return '–';
+  }
+
+  final hours = minutes ~/ 60;
+  final remainingMinutes = minutes % 60;
+
+  return '${hours.toString().padLeft(2, '0')}:'
+      '${remainingMinutes.toString().padLeft(2, '0')} Uhr';
 }
 
 String _formatDate(DateTime date) {

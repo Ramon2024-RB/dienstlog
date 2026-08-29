@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
 
+import '../../models/advertising.dart';
 import '../../models/district.dart';
 import '../../models/own_tour_entry.dart';
 import '../../models/support_entry.dart';
@@ -53,6 +54,7 @@ class _AddWorkDayPageState extends ConsumerState<AddWorkDayPage> {
   final List<_SupportDraft> _supportDrafts = [];
 
   bool _hasAdvertising = false;
+  bool _saveCustomAdvertising = false;
   bool _isSaving = false;
 
   @override
@@ -539,6 +541,7 @@ class _AddWorkDayPageState extends ConsumerState<AddWorkDayPage> {
                       if (!value) {
                         _advertisingController
                             .clear();
+                        _saveCustomAdvertising = false;
                       }
                     });
                   },
@@ -570,16 +573,25 @@ class _AddWorkDayPageState extends ConsumerState<AddWorkDayPage> {
                           .map((item) => item.name)
                           .toList();
 
+                      final isCustomAdvertising =
+                          !savedNames.contains(currentText) &&
+                              (currentText.isNotEmpty ||
+                                  _saveCustomAdvertising);
+
                       final selectedValue =
                           savedNames.contains(currentText)
                               ? currentText
-                              : currentText.isNotEmpty
+                              : isCustomAdvertising ||
+                                      savedNames.isEmpty
                                   ? otherValue
                                   : null;
 
                       return Column(
                         children: [
                           DropdownButtonFormField<String>(
+                            key: ValueKey(
+                              'advertising-$selectedValue-${savedNames.length}',
+                            ),
                             initialValue: selectedValue,
                             decoration: const InputDecoration(
                               labelText: 'Welche Werbung?',
@@ -594,24 +606,27 @@ class _AddWorkDayPageState extends ConsumerState<AddWorkDayPage> {
                               ),
                               const DropdownMenuItem<String>(
                                 value: otherValue,
-                                child: Text('Andere Werbung'),
+                                child: Text(
+                                  '+ Andere Werbung eingeben',
+                                ),
                               ),
                             ],
                             onChanged: (value) {
                               setState(() {
                                 if (value == null) {
                                   _advertisingController.clear();
+                                  _saveCustomAdvertising = false;
                                 } else if (value == otherValue) {
                                   _advertisingController.clear();
+                                  _saveCustomAdvertising = true;
                                 } else {
                                   _advertisingController.text = value;
+                                  _saveCustomAdvertising = false;
                                 }
                               });
                             },
                           ),
-                          if (selectedValue == otherValue ||
-                              (selectedValue == null &&
-                                  savedNames.isEmpty)) ...[
+                          if (selectedValue == otherValue) ...[
                             const SizedBox(height: 12),
                             TextField(
                               controller: _advertisingController,
@@ -620,6 +635,25 @@ class _AddWorkDayPageState extends ConsumerState<AddWorkDayPage> {
                                 hintText: 'Name der Werbung',
                                 border: OutlineInputBorder(),
                               ),
+                            ),
+                            const SizedBox(height: 4),
+                            CheckboxListTile(
+                              contentPadding: EdgeInsets.zero,
+                              controlAffinity:
+                                  ListTileControlAffinity.leading,
+                              title: const Text(
+                                'Für zukünftige Auswahl speichern',
+                              ),
+                              subtitle: const Text(
+                                'Die Werbung wird unter „Mehr → Werbung“ gespeichert.',
+                              ),
+                              value: _saveCustomAdvertising,
+                              onChanged: (value) {
+                                setState(() {
+                                  _saveCustomAdvertising =
+                                      value ?? false;
+                                });
+                              },
                             ),
                           ],
                         ],
@@ -1262,6 +1296,40 @@ class _AddWorkDayPageState extends ConsumerState<AddWorkDayPage> {
     });
 
     try {
+      if (isWorkDay &&
+          _hasAdvertising &&
+          _saveCustomAdvertising) {
+        final customAdvertisingName =
+            _advertisingController.text.trim();
+
+        if (customAdvertisingName.isEmpty) {
+          _showMessage(
+            'Bitte gib den Namen der Werbung ein.',
+          );
+          return;
+        }
+
+        final currentAdvertisings =
+            ref.read(advertisingProvider).value ?? const <Advertising>[];
+
+        final alreadyExists = currentAdvertisings.any(
+          (item) =>
+              item.name.trim().toLowerCase() ==
+              customAdvertisingName.toLowerCase(),
+        );
+
+        if (!alreadyExists) {
+          await ref
+              .read(advertisingProvider.notifier)
+              .addAdvertising(
+                Advertising(
+                  id: const Uuid().v4(),
+                  name: customAdvertisingName,
+                ),
+              );
+        }
+      }
+
       final notifier = ref.read(
         workDayProvider.notifier,
       );

@@ -1,32 +1,27 @@
+import 'zsp_location.dart';
+
 class SupportEntry {
   const SupportEntry({
     this.id,
     required this.workDayId,
     required this.district,
+    this.zspId = ZspLocation.werneckId,
     required this.packagesTaken,
     this.note,
   });
 
   final int? id;
-
-  /// ID des Arbeitstages, zu dem diese Unterstützung gehört.
   final String workDayId;
-
-  /// Bezirk, den du zusätzlich unterstützt hast.
-  ///
-  /// Beispiele: "13", "16", "21".
   final String district;
-
-  /// Anzahl der Pakete, die du von diesem Bezirk übernommen hast.
+  final String zspId;
   final int packagesTaken;
-
-  /// Optionale Bemerkung speziell zu dieser Unterstützung.
   final String? note;
 
   SupportEntry copyWith({
     int? id,
     String? workDayId,
     String? district,
+    String? zspId,
     int? packagesTaken,
     String? note,
     bool clearNote = false,
@@ -35,6 +30,7 @@ class SupportEntry {
       id: id ?? this.id,
       workDayId: workDayId ?? this.workDayId,
       district: district ?? this.district,
+      zspId: zspId ?? this.zspId,
       packagesTaken: packagesTaken ?? this.packagesTaken,
       note: clearNote ? null : note ?? this.note,
     );
@@ -45,6 +41,7 @@ class SupportEntry {
       'id': id,
       'work_day_id': workDayId,
       'district': district,
+      'zsp_id': zspId,
       'packages_taken': packagesTaken,
       'note': note,
     };
@@ -55,6 +52,7 @@ class SupportEntry {
       id: map['id'] as int?,
       workDayId: map['work_day_id'] as String,
       district: map['district'] as String,
+      zspId: (map['zsp_id'] as String?) ?? ZspLocation.werneckId,
       packagesTaken: map['packages_taken'] as int,
       note: map['note'] as String?,
     );
@@ -62,12 +60,7 @@ class SupportEntry {
 
   @override
   String toString() {
-    return 'SupportEntry('
-        'id: $id, '
-        'workDayId: $workDayId, '
-        'district: $district, '
-        'packagesTaken: $packagesTaken, '
-        'note: $note'
-        ')';
+    return 'SupportEntry(id: $id, workDayId: $workDayId, zspId: $zspId, '
+        'district: $district, packagesTaken: $packagesTaken, note: $note)';
   }
 }

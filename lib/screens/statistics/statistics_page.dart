@@ -3,7 +3,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../models/own_tour_entry.dart';
 import '../../models/work_day.dart';
+import '../../models/zsp_location.dart';
 import '../../services/work_day_provider.dart';
+import '../../services/zsp_provider.dart';
 import '../../utils/work_time_balance_calculator.dart';
 
 enum StatisticsPeriod {
@@ -646,6 +648,8 @@ class _PackageDistrictStatistics
     BuildContext context,
     WidgetRef ref,
   ) {
+    ref.watch(zspProvider);
+
     return FutureBuilder<_PackageStatisticsData>(
       future: _loadStatistics(
         ref,
@@ -867,6 +871,9 @@ class _PackageDistrictStatistics
       workDayProvider.notifier,
     );
 
+    final locations = ref.read(zspProvider).value ?? const <ZspLocation>[];
+    final zspNames = {for (final item in locations) item.id: item.name};
+
     final ownTourEntries =
         await notifier
             .getOwnTourEntriesForDateRange(
@@ -898,6 +905,7 @@ class _PackageDistrictStatistics
     final districtStatistics =
         _buildDistrictStatistics(
       ownTourEntries,
+      zspNames,
     );
 
     return _PackageStatisticsData(
@@ -913,79 +921,49 @@ class _PackageDistrictStatistics
     );
   }
 
-  List<_DistrictStatistic>
-      _buildDistrictStatistics(
+  List<_DistrictStatistic> _buildDistrictStatistics(
     List<OwnTourEntry> entries,
+    Map<String, String> zspNames,
   ) {
-    final groupedEntries =
-        <String, List<OwnTourEntry>>{};
+    final groupedEntries = <String, List<OwnTourEntry>>{};
 
     for (final entry in entries) {
-      final district =
-          entry.district.trim();
-
-      if (district.isEmpty) {
-        continue;
-      }
-
-      groupedEntries
-          .putIfAbsent(
-            district,
-            () => <OwnTourEntry>[],
-          )
-          .add(entry);
+      final district = entry.district.trim();
+      if (district.isEmpty) continue;
+      final key = '${entry.zspId}::$district';
+      groupedEntries.putIfAbsent(key, () => <OwnTourEntry>[]).add(entry);
     }
 
-    final statistics =
-        groupedEntries.entries.map(
-      (group) {
-        final entries = group.value;
+    final statistics = groupedEntries.entries.map((group) {
+      final entries = group.value;
+      final first = entries.first;
+      final totalPackages = entries.fold<int>(
+        0,
+        (sum, entry) => sum + entry.deliveredPackageCount,
+      );
+      final cancelledPackages = entries.fold<int>(
+        0,
+        (sum, entry) => sum + entry.cancelledPackageCount,
+      );
 
-        final totalPackages =
-            entries.fold<int>(
-          0,
-          (sum, entry) {
-            return sum +
-                entry.deliveredPackageCount;
-          },
-        );
+      return _DistrictStatistic(
+        zspId: first.zspId,
+        zspName: zspNames[first.zspId] ??
+            (first.zspId == ZspLocation.werneckId ? 'ZSP Werneck' : first.zspId),
+        district: first.district.trim(),
+        driveCount: entries.length,
+        totalPackages: totalPackages,
+        cancelledPackages: cancelledPackages,
+      );
+    }).toList();
 
-        final cancelledPackages =
-            entries.fold<int>(
-          0,
-          (sum, entry) {
-            return sum +
-                entry.cancelledPackageCount;
-          },
-        );
-
-        return _DistrictStatistic(
-          district: group.key,
-          driveCount: entries.length,
-          totalPackages: totalPackages,
-          cancelledPackages:
-              cancelledPackages,
-        );
-      },
-    ).toList();
-
-    statistics.sort(
-      (first, second) {
-        final driveComparison =
-            second.driveCount.compareTo(
-          first.driveCount,
-        );
-
-        if (driveComparison != 0) {
-          return driveComparison;
-        }
-
-        return _compareDistricts(
-          first.district,
-          second.district,
-        );
-      },
-    );
+    statistics.sort((first, second) {
+      final driveComparison = second.driveCount.compareTo(first.driveCount);
+      if (driveComparison != 0) return driveComparison;
+      final zspComparison = first.zspName.compareTo(second.zspName);
+      if (zspComparison != 0) return zspComparison;
+      return _compareDistricts(first.district, second.district);
+    });
 
     return statistics;
   }
@@ -1127,6 +1105,14 @@ class _DistrictStatisticCard
                               fontWeight:
                                   FontWeight
                                       .bold,
+                            ),
+                      ),
+                      const SizedBox(height: 3),
+                      Text(
+                        statistic.zspName,
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                              color: Theme.of(context).colorScheme.primary,
+                              fontWeight: FontWeight.w600,
                             ),
                       ),
                       const SizedBox(height: 3),
@@ -1309,12 +1295,16 @@ class _PackageStatisticsData {
 
 class _DistrictStatistic {
   const _DistrictStatistic({
+    required this.zspId,
+    required this.zspName,
     required this.district,
     required this.driveCount,
     required this.totalPackages,
     required this.cancelledPackages,
   });
 
+  final String zspId;
+  final String zspName;
   final String district;
   final int driveCount;
   final int totalPackages;

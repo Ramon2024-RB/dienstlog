@@ -1,423 +1,399 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:uuid/uuid.dart';
 
 import '../../models/district.dart';
+import '../../models/zsp_location.dart';
 import '../../services/district_provider.dart';
+import '../../services/zsp_provider.dart';
 
-class DistrictsPage extends ConsumerWidget {
+class DistrictsPage extends ConsumerStatefulWidget {
   const DistrictsPage({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<DistrictsPage> createState() => _DistrictsPageState();
+}
+
+class _DistrictsPageState extends ConsumerState<DistrictsPage> {
+  String? _selectedZspId;
+
+  @override
+  Widget build(BuildContext context) {
+    final locationsAsync = ref.watch(zspProvider);
     final districtsAsync = ref.watch(districtProvider);
+
+    if (locationsAsync.isLoading || districtsAsync.isLoading) {
+      return const Scaffold(
+        body: Center(child: CircularProgressIndicator()),
+      );
+    }
+
+    if (locationsAsync.hasError || districtsAsync.hasError) {
+      return Scaffold(
+        appBar: AppBar(title: const Text('ZSP & Bezirke')),
+        body: Center(
+          child: FilledButton.icon(
+            onPressed: () {
+              ref.invalidate(zspProvider);
+              ref.invalidate(districtProvider);
+            },
+            icon: const Icon(Icons.refresh),
+            label: const Text('Erneut versuchen'),
+          ),
+        ),
+      );
+    }
+
+    final locations = locationsAsync.value ?? const <ZspLocation>[];
+    final districts = districtsAsync.value ?? const <District>[];
+    final defaultLocation = locations.cast<ZspLocation?>().firstWhere(
+          (item) => item?.isDefault == true,
+          orElse: () => locations.isEmpty ? null : locations.first,
+        );
+    final selectedId = _selectedZspId ?? defaultLocation?.id;
+    final selectedLocation = locations.cast<ZspLocation?>().firstWhere(
+          (item) => item?.id == selectedId,
+          orElse: () => defaultLocation,
+        );
+    final selectedDistricts = districts
+        .where((district) => district.zspId == selectedLocation?.id)
+        .toList();
 
     return Scaffold(
       appBar: AppBar(
         title: const Text(
-          'Bezirke',
-          style: TextStyle(
-            fontWeight: FontWeight.bold,
+          'ZSP & Bezirke',
+          style: TextStyle(fontWeight: FontWeight.bold),
+        ),
+        actions: [
+          IconButton(
+            tooltip: 'ZSP hinzufügen',
+            onPressed: () => _addZsp(context),
+            icon: const Icon(Icons.add_location_alt_outlined),
           ),
-        ),
+        ],
       ),
-      body: districtsAsync.when(
-        loading: () {
-          return const Center(
-            child: CircularProgressIndicator(),
-          );
-        },
-        error: (error, stackTrace) {
-          return _DistrictErrorView(
-            error: error,
-            onRetry: () {
-              ref.invalidate(districtProvider);
-            },
-          );
-        },
-        data: (districts) {
-          return _DistrictList(
-            districts: districts,
-          );
-        },
-      ),
-    );
-  }
-}
-
-class _DistrictList extends ConsumerWidget {
-  const _DistrictList({
-    required this.districts,
-  });
-
-  final List<District> districts;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final activeDistricts = districts
-        .where((district) => district.isActive)
-        .toList();
-
-    final safeDistrictCount = activeDistricts
-        .where((district) => district.canDriveSafely)
-        .length;
-
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
-      children: [
-        _DistrictSummaryCard(
-          totalDistricts: activeDistricts.length,
-          safeDistricts: safeDistrictCount,
-        ),
-        const SizedBox(height: 24),
-        Text(
-          'Alle Bezirke',
-          style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                fontWeight: FontWeight.bold,
-              ),
-        ),
-        const SizedBox(height: 6),
-        Text(
-          'Markiere die Bezirke, die du selbstständig und sicher fahren kannst.',
-          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                color: Theme.of(context).colorScheme.onSurfaceVariant,
-              ),
-        ),
-        const SizedBox(height: 16),
-        ...activeDistricts.map(
-          (district) => Padding(
-            padding: const EdgeInsets.only(bottom: 10),
-            child: _DistrictCard(
-              district: district,
-              onChanged: (value) async {
-                await ref
-                    .read(districtProvider.notifier)
-                    .setCanDriveSafely(
-                      district,
-                      value,
-                    );
-              },
-              onNotePressed: () {
-                _showNoteDialog(
-                  context,
-                  ref,
-                  district,
-                );
-              },
+      floatingActionButton: selectedLocation == null
+          ? null
+          : FloatingActionButton.extended(
+              onPressed: () => _addDistrict(context, selectedLocation),
+              icon: const Icon(Icons.add),
+              label: const Text('Bezirk'),
             ),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Future<void> _showNoteDialog(
-    BuildContext context,
-    WidgetRef ref,
-    District district,
-  ) async {
-    final note = await showDialog<String?>(
-      context: context,
-      builder: (dialogContext) {
-        return _DistrictNoteDialog(
-          districtNumber: district.number,
-          initialNote: district.note ?? '',
-        );
-      },
-    );
-
-    if (note == null) {
-      return;
-    }
-
-    await ref
-        .read(districtProvider.notifier)
-        .updateNote(
-          district,
-          note,
-        );
-  }
-}
-
-class _DistrictNoteDialog extends StatefulWidget {
-  const _DistrictNoteDialog({
-    required this.districtNumber,
-    required this.initialNote,
-  });
-
-  final int districtNumber;
-  final String initialNote;
-
-  @override
-  State<_DistrictNoteDialog> createState() => _DistrictNoteDialogState();
-}
-
-class _DistrictNoteDialogState extends State<_DistrictNoteDialog> {
-  late final TextEditingController _controller;
-
-  @override
-  void initState() {
-    super.initState();
-
-    _controller = TextEditingController(
-      text: widget.initialNote,
-    );
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return AlertDialog(
-      title: Text(
-        'Notiz – Bezirk ${widget.districtNumber}',
-      ),
-      content: TextField(
-        controller: _controller,
-        autofocus: true,
-        minLines: 2,
-        maxLines: 5,
-        decoration: const InputDecoration(
-          hintText: 'Optionale Notiz zum Bezirk',
-          border: OutlineInputBorder(),
-        ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () {
-            Navigator.of(context).pop();
-          },
-          child: const Text('Abbrechen'),
-        ),
-        FilledButton(
-          onPressed: () {
-            Navigator.of(context).pop(
-              _controller.text,
-            );
-          },
-          child: const Text('Speichern'),
-        ),
-      ],
-    );
-  }
-}
-
-class _DistrictSummaryCard extends StatelessWidget {
-  const _DistrictSummaryCard({
-    required this.totalDistricts,
-    required this.safeDistricts,
-  });
-
-  final int totalDistricts;
-  final int safeDistricts;
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Row(
-          children: [
-            Container(
-              width: 52,
-              height: 52,
-              decoration: BoxDecoration(
-                color: Theme.of(context)
-                    .colorScheme
-                    .primaryContainer,
-                borderRadius: BorderRadius.circular(16),
-              ),
-              child: Icon(
-                Icons.route_outlined,
-                color: Theme.of(context)
-                    .colorScheme
-                    .onPrimaryContainer,
-              ),
+      body: ListView(
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, 100),
+        children: [
+          DropdownButtonFormField<String>(
+            initialValue: selectedLocation?.id,
+            decoration: const InputDecoration(
+              labelText: 'ZSP auswählen',
+              border: OutlineInputBorder(),
             ),
-            const SizedBox(width: 16),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    '$safeDistricts von $totalDistricts',
-                    style: Theme.of(context)
-                        .textTheme
-                        .headlineSmall
-                        ?.copyWith(
-                          fontWeight: FontWeight.bold,
-                        ),
+            items: locations
+                .map(
+                  (location) => DropdownMenuItem<String>(
+                    value: location.id,
+                    child: Text(
+                      location.isDefault
+                          ? '${location.name} · Standard'
+                          : location.isActive
+                              ? location.name
+                              : '${location.name} · deaktiviert',
+                    ),
                   ),
-                  const SizedBox(height: 2),
-                  Text(
-                    'Bezirke sicher fahrbar',
-                    style: Theme.of(context)
-                        .textTheme
-                        .bodyMedium
-                        ?.copyWith(
-                          color: Theme.of(context)
-                              .colorScheme
-                              .onSurfaceVariant,
+                )
+                .toList(),
+            onChanged: (value) {
+              setState(() => _selectedZspId = value);
+            },
+          ),
+          if (selectedLocation != null) ...[
+            const SizedBox(height: 12),
+            Card(
+              child: Column(
+                children: [
+                  ListTile(
+                    leading: const Icon(Icons.location_on_outlined),
+                    title: Text(selectedLocation.name),
+                    subtitle: Text(
+                      selectedLocation.isDefault
+                          ? 'Dein Standard-ZSP'
+                          : selectedLocation.isActive
+                              ? 'Aktiver Standort'
+                              : 'Deaktivierter Standort',
+                    ),
+                    trailing: PopupMenuButton<String>(
+                      onSelected: (value) async {
+                        if (value == 'default') {
+                          await ref.read(zspProvider.notifier).setDefault(selectedLocation.id);
+                        } else if (value == 'toggle') {
+                          if (selectedLocation.isDefault && selectedLocation.isActive) {
+                            _message('Das Standard-ZSP kann nicht deaktiviert werden. Wähle zuerst ein anderes Standard-ZSP.');
+                            return;
+                          }
+                          await ref.read(zspProvider.notifier).setActive(
+                                selectedLocation,
+                                !selectedLocation.isActive,
+                              );
+                        }
+                      },
+                      itemBuilder: (context) => [
+                        if (!selectedLocation.isDefault)
+                          const PopupMenuItem(
+                            value: 'default',
+                            child: Text('Als Standard festlegen'),
+                          ),
+                        PopupMenuItem(
+                          value: 'toggle',
+                          child: Text(
+                            selectedLocation.isActive
+                                ? 'ZSP deaktivieren'
+                                : 'ZSP aktivieren',
+                          ),
                         ),
+                      ],
+                    ),
                   ),
                 ],
               ),
+            ),
+            const SizedBox(height: 24),
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    'Bezirke',
+                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                          fontWeight: FontWeight.bold,
+                        ),
+                  ),
+                ),
+                Text('${selectedDistricts.where((d) => d.isActive).length} aktiv'),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Deaktivierte Bezirke bleiben in alten Statistiken erhalten und werden nur bei neuen Einträgen nicht mehr angeboten.',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
+            ),
+            const SizedBox(height: 12),
+            if (selectedDistricts.isEmpty)
+              const Card(
+                child: Padding(
+                  padding: EdgeInsets.all(20),
+                  child: Text('Für dieses ZSP sind noch keine Bezirke angelegt.'),
+                ),
+              )
+            else
+              for (final district in selectedDistricts) ...[
+                _DistrictCard(
+                  district: district,
+                  onSafeChanged: (value) => ref
+                      .read(districtProvider.notifier)
+                      .setCanDriveSafely(district, value),
+                  onEdit: () => _editDistrict(context, district),
+                  onToggleActive: () => ref
+                      .read(districtProvider.notifier)
+                      .setActive(district, !district.isActive),
+                ),
+                const SizedBox(height: 10),
+              ],
+          ],
+        ],
+      ),
+    );
+  }
+
+  Future<void> _addZsp(BuildContext context) async {
+    final controller = TextEditingController();
+    final name = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('ZSP hinzufügen'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          decoration: const InputDecoration(hintText: 'z. B. ZSP Schweinfurt'),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Abbrechen')),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, controller.text.trim()),
+            child: const Text('Hinzufügen'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (name == null || name.isEmpty) return;
+    try {
+      final location = ZspLocation(id: const Uuid().v4(), name: name);
+      await ref.read(zspProvider.notifier).addLocation(location);
+      if (mounted) setState(() => _selectedZspId = location.id);
+    } catch (_) {
+      _message('Das ZSP konnte nicht hinzugefügt werden. Möglicherweise gibt es den Namen schon.');
+    }
+  }
+
+  Future<void> _addDistrict(BuildContext context, ZspLocation location) async {
+    final numberController = TextEditingController();
+    final result = await showDialog<int>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Bezirk zu ${location.name} hinzufügen'),
+        content: TextField(
+          controller: numberController,
+          autofocus: true,
+          keyboardType: TextInputType.number,
+          decoration: const InputDecoration(labelText: 'Bezirksnummer'),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Abbrechen')),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, int.tryParse(numberController.text.trim())),
+            child: const Text('Hinzufügen'),
+          ),
+        ],
+      ),
+    );
+    numberController.dispose();
+    if (result == null || result <= 0) return;
+    try {
+      await ref.read(districtProvider.notifier).addDistrict(
+            District(number: result, zspId: location.id),
+          );
+    } catch (_) {
+      _message('Bezirk $result existiert in diesem ZSP bereits.');
+    }
+  }
+
+  Future<void> _editDistrict(BuildContext context, District district) async {
+    final numberController = TextEditingController(text: '${district.number}');
+    final noteController = TextEditingController(text: district.note ?? '');
+    var canDriveSafely = district.canDriveSafely;
+
+    final replacement = await showDialog<District>(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: Text('Bezirk ${district.number} bearbeiten'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: numberController,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(labelText: 'Bezirksnummer'),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: noteController,
+                minLines: 2,
+                maxLines: 4,
+                decoration: const InputDecoration(labelText: 'Notiz'),
+              ),
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                title: const Text('Sicher fahrbar'),
+                value: canDriveSafely,
+                onChanged: (value) => setDialogState(() => canDriveSafely = value),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(context), child: const Text('Abbrechen')),
+            FilledButton(
+              onPressed: () {
+                final number = int.tryParse(numberController.text.trim());
+                if (number == null || number <= 0) return;
+                Navigator.pop(
+                  context,
+                  District(
+                    number: number,
+                    zspId: district.zspId,
+                    isActive: district.isActive,
+                    canDriveSafely: canDriveSafely,
+                    note: noteController.text.trim().isEmpty ? null : noteController.text.trim(),
+                  ),
+                );
+              },
+              child: const Text('Speichern'),
             ),
           ],
         ),
       ),
     );
+    numberController.dispose();
+    noteController.dispose();
+    if (replacement == null) return;
+    try {
+      await ref.read(districtProvider.notifier).replaceDistrictDefinition(
+            original: district,
+            replacement: replacement,
+          );
+    } catch (_) {
+      _message('Die Änderung konnte nicht gespeichert werden. Die Bezirksnummer ist möglicherweise bereits vergeben.');
+    }
+  }
+
+  void _message(String text) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(text)));
   }
 }
 
 class _DistrictCard extends StatelessWidget {
   const _DistrictCard({
     required this.district,
-    required this.onChanged,
-    required this.onNotePressed,
+    required this.onSafeChanged,
+    required this.onEdit,
+    required this.onToggleActive,
   });
 
   final District district;
-  final ValueChanged<bool> onChanged;
-  final VoidCallback onNotePressed;
+  final ValueChanged<bool> onSafeChanged;
+  final VoidCallback onEdit;
+  final VoidCallback onToggleActive;
 
   @override
   Widget build(BuildContext context) {
     return Card(
-      margin: EdgeInsets.zero,
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(
-          16,
-          10,
-          8,
-          10,
+      child: ListTile(
+        leading: CircleAvatar(child: Text('${district.number}')),
+        title: Text(
+          'Bezirk ${district.number}',
+          style: TextStyle(
+            fontWeight: FontWeight.w600,
+            decoration: district.isActive ? null : TextDecoration.lineThrough,
+          ),
         ),
-        child: Row(
-          children: [
-            Container(
-              width: 44,
-              height: 44,
-              alignment: Alignment.center,
-              decoration: BoxDecoration(
-                color: district.canDriveSafely
-                    ? Theme.of(context)
-                        .colorScheme
-                        .primaryContainer
-                    : Theme.of(context)
-                        .colorScheme
-                        .surfaceContainerHighest,
-                borderRadius: BorderRadius.circular(14),
-              ),
-              child: Text(
-                '${district.number}',
-                style: Theme.of(context)
-                    .textTheme
-                    .titleMedium
-                    ?.copyWith(
-                      fontWeight: FontWeight.bold,
-                    ),
-              ),
-            ),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Bezirk ${district.number}',
-                    style: Theme.of(context)
-                        .textTheme
-                        .titleMedium
-                        ?.copyWith(
-                          fontWeight: FontWeight.w600,
-                        ),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    district.note?.isNotEmpty == true
-                        ? district.note!
-                        : district.canDriveSafely
-                            ? 'Sicher fahrbar'
-                            : 'Noch nicht markiert',
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: Theme.of(context)
-                        .textTheme
-                        .bodySmall
-                        ?.copyWith(
-                          color: Theme.of(context)
-                              .colorScheme
-                              .onSurfaceVariant,
-                        ),
-                  ),
-                ],
-              ),
-            ),
-            IconButton(
-              tooltip: 'Notiz',
-              onPressed: onNotePressed,
-              icon: Icon(
-                district.note?.isNotEmpty == true
-                    ? Icons.notes
-                    : Icons.note_add_outlined,
-              ),
-            ),
-            Switch(
-              value: district.canDriveSafely,
-              onChanged: onChanged,
-            ),
-          ],
+        subtitle: Text(
+          district.note?.isNotEmpty == true
+              ? district.note!
+              : district.isActive
+                  ? district.canDriveSafely
+                      ? 'Aktiv · sicher fahrbar'
+                      : 'Aktiv'
+                  : 'Deaktiviert · alte Daten bleiben erhalten',
         ),
-      ),
-    );
-  }
-}
-
-class _DistrictErrorView extends StatelessWidget {
-  const _DistrictErrorView({
-    required this.error,
-    required this.onRetry,
-  });
-
-  final Object error;
-  final VoidCallback onRetry;
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
+        trailing: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(
-              Icons.error_outline,
-              size: 48,
-            ),
-            const SizedBox(height: 16),
-            Text(
-              'Die Bezirke konnten nicht geladen werden.',
-              textAlign: TextAlign.center,
-              style: Theme.of(context)
-                  .textTheme
-                  .titleMedium
-                  ?.copyWith(
-                    fontWeight: FontWeight.bold,
-                  ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              '$error',
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 20),
-            FilledButton.icon(
-              onPressed: onRetry,
-              icon: const Icon(Icons.refresh),
-              label: const Text('Erneut versuchen'),
+            Switch(value: district.canDriveSafely, onChanged: district.isActive ? onSafeChanged : null),
+            PopupMenuButton<String>(
+              onSelected: (value) {
+                if (value == 'edit') onEdit();
+                if (value == 'toggle') onToggleActive();
+              },
+              itemBuilder: (context) => [
+                const PopupMenuItem(value: 'edit', child: Text('Bearbeiten')),
+                PopupMenuItem(
+                  value: 'toggle',
+                  child: Text(district.isActive ? 'Deaktivieren' : 'Aktivieren'),
+                ),
+              ],
             ),
           ],
         ),

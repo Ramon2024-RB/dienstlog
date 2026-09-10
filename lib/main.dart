@@ -998,6 +998,7 @@ class _TodayCard extends ConsumerWidget {
                             return AddWorkDayPage(
                               initialDate: workDay!.date,
                               existingWorkDay: workDay,
+                              initialOwnTourEntries: data?.ownTours ?? const <OwnTourEntry>[],
                             );
                           },
                         ),
@@ -1820,10 +1821,10 @@ class _MorePage extends StatelessWidget {
                     Icons.route_outlined,
                   ),
                   title: const Text(
-                    'Bezirke',
+                    'ZSP & Bezirke',
                   ),
                   subtitle: const Text(
-                    '25 Bezirke verwalten',
+                    'Standorte und Bezirke verwalten',
                   ),
                   trailing: const Icon(
                     Icons.chevron_right,

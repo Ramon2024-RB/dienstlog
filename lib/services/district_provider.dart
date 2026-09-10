@@ -18,32 +18,42 @@ class DistrictNotifier extends AsyncNotifier<List<District>> {
 
   Future<void> refresh() async {
     state = const AsyncLoading();
+    state = await AsyncValue.guard(() => _database.getDistricts());
+  }
 
-    state = await AsyncValue.guard(
-      () => _database.getDistricts(),
-    );
+  Future<void> addDistrict(District district) async {
+    await _database.insertDistrict(district);
+    state = AsyncData(await _database.getDistricts());
   }
 
   Future<void> updateDistrict(District district) async {
     final previousState = state;
 
-    state = AsyncData(
-      [
-        for (final item in previousState.value ?? <District>[])
-          if (item.number == district.number) district else item,
-      ],
-    );
+    state = AsyncData([
+      for (final item in previousState.value ?? <District>[])
+        if (item.zspId == district.zspId && item.number == district.number)
+          district
+        else
+          item,
+    ]);
 
     try {
       await _database.updateDistrict(district);
     } catch (error, stackTrace) {
       state = previousState;
-
-      Error.throwWithStackTrace(
-        error,
-        stackTrace,
-      );
+      Error.throwWithStackTrace(error, stackTrace);
     }
+  }
+
+  Future<void> replaceDistrictDefinition({
+    required District original,
+    required District replacement,
+  }) async {
+    await _database.replaceDistrictDefinition(
+      original: original,
+      replacement: replacement,
+    );
+    state = AsyncData(await _database.getDistricts());
   }
 
   Future<void> setCanDriveSafely(
@@ -51,9 +61,7 @@ class DistrictNotifier extends AsyncNotifier<List<District>> {
     bool canDriveSafely,
   ) async {
     await updateDistrict(
-      district.copyWith(
-        canDriveSafely: canDriveSafely,
-      ),
+      district.copyWith(canDriveSafely: canDriveSafely),
     );
   }
 
@@ -62,9 +70,7 @@ class DistrictNotifier extends AsyncNotifier<List<District>> {
     bool isActive,
   ) async {
     await updateDistrict(
-      district.copyWith(
-        isActive: isActive,
-      ),
+      district.copyWith(isActive: isActive),
     );
   }
 
@@ -73,7 +79,6 @@ class DistrictNotifier extends AsyncNotifier<List<District>> {
     String? note,
   ) async {
     final trimmedNote = note?.trim();
-
     await updateDistrict(
       district.copyWith(
         note: trimmedNote,

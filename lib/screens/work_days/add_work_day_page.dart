@@ -7,9 +7,11 @@ import '../../models/district.dart';
 import '../../models/own_tour_entry.dart';
 import '../../models/support_entry.dart';
 import '../../models/work_day.dart';
+import '../../models/zsp_location.dart';
 import '../../services/advertising_provider.dart';
 import '../../services/district_provider.dart';
 import '../../services/work_day_provider.dart';
+import '../../services/zsp_provider.dart';
 
 class AddWorkDayPage extends ConsumerStatefulWidget {
   const AddWorkDayPage({
@@ -36,6 +38,8 @@ class _AddWorkDayPageState extends ConsumerState<AddWorkDayPage> {
   WorkDayType _type = WorkDayType.work;
   WorkAssignmentType _assignmentType =
       WorkAssignmentType.ownDistrict;
+
+  String? _selectedZspId;
 
   TimeOfDay? _workStart;
   TimeOfDay? _departureTime;
@@ -72,6 +76,7 @@ class _AddWorkDayPageState extends ConsumerState<AddWorkDayPage> {
 
       _type = existingWorkDay.type;
       _assignmentType = existingWorkDay.assignmentType;
+      _selectedZspId = existingWorkDay.zspId;
 
       _workStart = _minutesToTime(
         existingWorkDay.workStart,
@@ -156,8 +161,79 @@ class _AddWorkDayPageState extends ConsumerState<AddWorkDayPage> {
 
   @override
   Widget build(BuildContext context) {
-    final districtsAsync =
-        ref.watch(districtProvider);
+    final districtsAsync = ref.watch(districtProvider);
+    final zspAsync = ref.watch(zspProvider);
+
+    if (districtsAsync.isLoading || zspAsync.isLoading) {
+      return Scaffold(
+        appBar: AppBar(
+          title: Text(
+            widget.existingWorkDay == null
+                ? 'Arbeitstag eintragen'
+                : 'Arbeitstag bearbeiten',
+            style: const TextStyle(fontWeight: FontWeight.bold),
+          ),
+        ),
+        body: const Center(child: CircularProgressIndicator()),
+      );
+    }
+
+    if (districtsAsync.hasError || zspAsync.hasError) {
+      return Scaffold(
+        appBar: AppBar(
+          title: Text(
+            widget.existingWorkDay == null
+                ? 'Arbeitstag eintragen'
+                : 'Arbeitstag bearbeiten',
+            style: const TextStyle(fontWeight: FontWeight.bold),
+          ),
+        ),
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.error_outline, size: 48),
+                const SizedBox(height: 16),
+                const Text(
+                  'Standorte oder Bezirke konnten nicht geladen werden.',
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 16),
+                FilledButton.icon(
+                  onPressed: () {
+                    ref.invalidate(districtProvider);
+                    ref.invalidate(zspProvider);
+                  },
+                  icon: const Icon(Icons.refresh),
+                  label: const Text('Erneut versuchen'),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
+    final districts = districtsAsync.value ?? const <District>[];
+    final locations = zspAsync.value ?? const <ZspLocation>[];
+    final activeLocations = locations.where((item) => item.isActive).toList();
+
+    final defaultLocation = locations.cast<ZspLocation?>().firstWhere(
+          (item) => item?.isDefault == true,
+          orElse: () => activeLocations.isEmpty ? null : activeLocations.first,
+        );
+
+    final effectiveZspId = _selectedZspId ??
+        widget.existingWorkDay?.zspId ??
+        defaultLocation?.id ??
+        ZspLocation.werneckId;
+
+    final activeDistricts = districts
+        .where((district) =>
+            district.isActive && district.zspId == effectiveZspId)
+        .toList();
 
     return Scaffold(
       appBar: AppBar(
@@ -165,64 +241,14 @@ class _AddWorkDayPageState extends ConsumerState<AddWorkDayPage> {
           widget.existingWorkDay == null
               ? 'Arbeitstag eintragen'
               : 'Arbeitstag bearbeiten',
-          style: const TextStyle(
-            fontWeight: FontWeight.bold,
-          ),
+          style: const TextStyle(fontWeight: FontWeight.bold),
         ),
       ),
-      body: districtsAsync.when(
-        loading: () {
-          return const Center(
-            child: CircularProgressIndicator(),
-          );
-        },
-        error: (error, stackTrace) {
-          return Center(
-            child: Padding(
-              padding: const EdgeInsets.all(24),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Icon(
-                    Icons.error_outline,
-                    size: 48,
-                  ),
-                  const SizedBox(height: 16),
-                  const Text(
-                    'Die Bezirke konnten nicht geladen werden.',
-                    textAlign: TextAlign.center,
-                  ),
-                  const SizedBox(height: 16),
-                  FilledButton.icon(
-                    onPressed: () {
-                      ref.invalidate(
-                        districtProvider,
-                      );
-                    },
-                    icon: const Icon(
-                      Icons.refresh,
-                    ),
-                    label: const Text(
-                      'Erneut versuchen',
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          );
-        },
-        data: (districts) {
-          final activeDistricts = districts
-              .where(
-                (district) => district.isActive,
-              )
-              .toList();
-
-          return _buildForm(
-            context,
-            activeDistricts,
-          );
-        },
+      body: _buildForm(
+        context,
+        activeDistricts,
+        activeLocations,
+        effectiveZspId,
       ),
     );
   }
@@ -230,6 +256,8 @@ class _AddWorkDayPageState extends ConsumerState<AddWorkDayPage> {
   Widget _buildForm(
     BuildContext context,
     List<District> districts,
+    List<ZspLocation> locations,
+    String effectiveZspId,
   ) {
     final advertisingsAsync =
         ref.watch(advertisingProvider);
@@ -297,6 +325,44 @@ class _AddWorkDayPageState extends ConsumerState<AddWorkDayPage> {
         ),
 
         if (isWorkDay) ...[
+          const SizedBox(height: 16),
+
+          _SectionCard(
+            title: 'Standort',
+            icon: Icons.location_on_outlined,
+            child: DropdownButtonFormField<String>(
+              initialValue: effectiveZspId,
+              decoration: const InputDecoration(
+                labelText: 'ZSP',
+                border: OutlineInputBorder(),
+              ),
+              items: locations
+                  .map(
+                    (location) => DropdownMenuItem<String>(
+                      value: location.id,
+                      child: Text(
+                        location.isDefault
+                            ? '${location.name} · Standard'
+                            : location.name,
+                      ),
+                    ),
+                  )
+                  .toList(),
+              onChanged: (value) {
+                if (value == null || value == effectiveZspId) return;
+                setState(() {
+                  _selectedZspId = value;
+                  for (final draft in _ownTourDrafts) {
+                    draft.districtNumber = null;
+                  }
+                  for (final draft in _supportDrafts) {
+                    draft.districtNumber = null;
+                  }
+                });
+              },
+            ),
+          ),
+
           const SizedBox(height: 16),
 
           _SectionCard(
@@ -692,7 +758,11 @@ class _AddWorkDayPageState extends ConsumerState<AddWorkDayPage> {
           onPressed: _isSaving
               ? null
               : () {
-                  _save(districts);
+                  _save(
+                    districts,
+                    locations,
+                    effectiveZspId,
+                  );
                 },
           icon: _isSaving
               ? const SizedBox(
@@ -876,7 +946,9 @@ class _AddWorkDayPageState extends ConsumerState<AddWorkDayPage> {
       });
     }
 
-    draft.dispose();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      draft.dispose();
+    });
   }
 
   Widget _buildSupportSection(
@@ -998,6 +1070,8 @@ class _AddWorkDayPageState extends ConsumerState<AddWorkDayPage> {
 
   Future<void> _save(
     List<District> districts,
+    List<ZspLocation> locations,
+    String effectiveZspId,
   ) async {
     final isWorkDay =
         _type == WorkDayType.work;
@@ -1163,6 +1237,7 @@ class _AddWorkDayPageState extends ConsumerState<AddWorkDayPage> {
                     district: draft
                         .districtNumber
                         .toString(),
+                    zspId: effectiveZspId,
                     districtPart: draft
                         .districtPart,
                     packageCount:
@@ -1190,6 +1265,7 @@ class _AddWorkDayPageState extends ConsumerState<AddWorkDayPage> {
                     district: draft
                         .districtNumber
                         .toString(),
+                    zspId: effectiveZspId,
                     packagesTaken:
                         _parseCount(
                       draft
@@ -1230,6 +1306,7 @@ class _AddWorkDayPageState extends ConsumerState<AddWorkDayPage> {
       id: id,
       date: _date,
       type: _type,
+      zspId: effectiveZspId,
       assignmentType:
           _assignmentType,
       districtId:

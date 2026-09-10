@@ -1,3 +1,5 @@
+import 'zsp_location.dart';
+
 enum WorkDayType {
   work,
   free,
@@ -22,6 +24,7 @@ class WorkDay {
     required this.id,
     required this.date,
     required this.type,
+    this.zspId = ZspLocation.werneckId,
     this.assignmentType = WorkAssignmentType.ownDistrict,
     this.districtId,
     this.districtPart = DistrictPart.full,
@@ -38,100 +41,43 @@ class WorkDay {
   });
 
   final String id;
-
-  /// Datum des Eintrags.
   final DateTime date;
-
-  /// Arbeit, Frei, Urlaub, Feiertag oder Krank.
   final WorkDayType type;
-
-  /// Regulärer eigener Bezirk oder zusätzlicher Paketfahrer.
+  final String zspId;
   final WorkAssignmentType assignmentType;
-
-  /// Eigener regulärer Bezirk.
-  ///
-  /// Bei einem Paketfahrer-Tag kann dieser Wert leer bleiben.
   final String? districtId;
-
-  /// Ganzer Bezirk, A-Teil oder B-Teil.
   final DistrictPart districtPart;
-
-  /// Arbeitsbeginn in Minuten seit Mitternacht.
-  ///
-  /// Beispiel:
-  /// 07:30 Uhr = 450.
   final int? workStart;
-
-  /// Tatsächliche Abfahrt in Minuten seit Mitternacht.
   final int? departureTime;
-
-  /// Ende der Zustellung in Minuten seit Mitternacht.
   final int? deliveryEnd;
-
-  /// Arbeitsende in Minuten seit Mitternacht.
   final int? workEnd;
-
-  /// Pause in Minuten.
   final int breakMinutes;
-
-  /// Paketmenge der eigenen regulären Tour.
-  ///
-  /// Übernommene Pakete aus Unterstützungen werden separat
-  /// über SupportEntry gespeichert.
   final int packageCount;
-
-  /// Anzahl der abgebrochenen bzw. nicht zugestellten Pakete.
   final int cancelledPackageCount;
-
-  /// Gibt an, ob an diesem Tag Werbung mitgenommen wurde.
   final bool hasAdvertising;
-
-  /// Bezeichnung der mitgenommenen Werbung.
   final String? advertising;
-
-  /// Freie Bemerkungen zum Arbeitstag.
   final String? notes;
 
   bool get isWorkDay => type == WorkDayType.work;
-
-  bool get isPackageDriver =>
-      assignmentType == WorkAssignmentType.packageDriver;
+  bool get isPackageDriver => assignmentType == WorkAssignmentType.packageDriver;
 
   int? get workDurationMinutes {
-    if (workStart == null || workEnd == null) {
-      return null;
-    }
-
+    if (workStart == null || workEnd == null) return null;
     final duration = workEnd! - workStart! - breakMinutes;
-
-    if (duration < 0) {
-      return null;
-    }
-
+    if (duration < 0) return null;
     return duration;
   }
 
   int? get deliveryDurationMinutes {
-    if (departureTime == null || deliveryEnd == null) {
-      return null;
-    }
-
+    if (departureTime == null || deliveryEnd == null) return null;
     final duration = deliveryEnd! - departureTime!;
-
-    if (duration < 0) {
-      return null;
-    }
-
+    if (duration < 0) return null;
     return duration;
   }
 
   int get deliveredPackageCount {
     final delivered = packageCount - cancelledPackageCount;
-
-    if (delivered < 0) {
-      return 0;
-    }
-
+    if (delivered < 0) return 0;
     return delivered;
   }
 
@@ -139,6 +85,7 @@ class WorkDay {
     String? id,
     DateTime? date,
     WorkDayType? type,
+    String? zspId,
     WorkAssignmentType? assignmentType,
     String? districtId,
     bool clearDistrictId = false,
@@ -164,27 +111,19 @@ class WorkDay {
       id: id ?? this.id,
       date: date ?? this.date,
       type: type ?? this.type,
+      zspId: zspId ?? this.zspId,
       assignmentType: assignmentType ?? this.assignmentType,
-      districtId:
-          clearDistrictId ? null : districtId ?? this.districtId,
+      districtId: clearDistrictId ? null : districtId ?? this.districtId,
       districtPart: districtPart ?? this.districtPart,
-      workStart:
-          clearWorkStart ? null : workStart ?? this.workStart,
-      departureTime: clearDepartureTime
-          ? null
-          : departureTime ?? this.departureTime,
-      deliveryEnd:
-          clearDeliveryEnd ? null : deliveryEnd ?? this.deliveryEnd,
-      workEnd:
-          clearWorkEnd ? null : workEnd ?? this.workEnd,
+      workStart: clearWorkStart ? null : workStart ?? this.workStart,
+      departureTime: clearDepartureTime ? null : departureTime ?? this.departureTime,
+      deliveryEnd: clearDeliveryEnd ? null : deliveryEnd ?? this.deliveryEnd,
+      workEnd: clearWorkEnd ? null : workEnd ?? this.workEnd,
       breakMinutes: breakMinutes ?? this.breakMinutes,
       packageCount: packageCount ?? this.packageCount,
-      cancelledPackageCount:
-          cancelledPackageCount ?? this.cancelledPackageCount,
+      cancelledPackageCount: cancelledPackageCount ?? this.cancelledPackageCount,
       hasAdvertising: hasAdvertising ?? this.hasAdvertising,
-      advertising: clearAdvertising
-          ? null
-          : advertising ?? this.advertising,
+      advertising: clearAdvertising ? null : advertising ?? this.advertising,
       notes: clearNotes ? null : notes ?? this.notes,
     );
   }
@@ -194,6 +133,7 @@ class WorkDay {
       'id': id,
       'date': _dateToDatabase(date),
       'type': type.name,
+      'zsp_id': zspId,
       'assignment_type': assignmentType.name,
       'district_id': districtId,
       'district_part': districtPart.name,
@@ -218,6 +158,7 @@ class WorkDay {
         (type) => type.name == map['type'],
         orElse: () => WorkDayType.work,
       ),
+      zspId: (map['zsp_id'] as String?) ?? ZspLocation.werneckId,
       assignmentType: WorkAssignmentType.values.firstWhere(
         (type) => type.name == map['assignment_type'],
         orElse: () => WorkAssignmentType.ownDistrict,
@@ -233,22 +174,15 @@ class WorkDay {
       workEnd: map['work_end'] as int?,
       breakMinutes: (map['break_minutes'] as int?) ?? 0,
       packageCount: (map['package_count'] as int?) ?? 0,
-      cancelledPackageCount:
-          (map['cancelled_package_count'] as int?) ?? 0,
-      hasAdvertising:
-          (map['has_advertising'] as int? ?? 0) == 1,
+      cancelledPackageCount: (map['cancelled_package_count'] as int?) ?? 0,
+      hasAdvertising: (map['has_advertising'] as int? ?? 0) == 1,
       advertising: map['advertising'] as String?,
       notes: map['notes'] as String?,
     );
   }
 
   static String _dateToDatabase(DateTime date) {
-    final normalizedDate = DateTime(
-      date.year,
-      date.month,
-      date.day,
-    );
-
+    final normalizedDate = DateTime(date.year, date.month, date.day);
     return normalizedDate.toIso8601String();
   }
 }

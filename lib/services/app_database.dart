@@ -7,6 +7,7 @@ import '../models/own_tour_entry.dart';
 import '../models/support_entry.dart';
 import '../models/work_day.dart';
 import '../models/work_schedule_entry.dart';
+import '../models/zsp_location.dart';
 
 class AppDatabase {
   AppDatabase._();
@@ -16,7 +17,7 @@ class AppDatabase {
   static Database? _database;
 
   static const String _databaseName = 'dienstlog.db';
-  static const int _databaseVersion = 6;
+  static const int _databaseVersion = 7;
 
   Future<Database> get database async {
     if (_database != null) {
@@ -45,6 +46,7 @@ class AppDatabase {
   }
 
   Future<void> _onCreate(Database db, int version) async {
+    await _createZspLocationsTable(db);
     await _createDistrictsTable(db);
     await _createWorkDaysTable(db);
     await _createSupportEntriesTable(db);
@@ -53,6 +55,7 @@ class AppDatabase {
     await _createWorkTimeSettingsTable(db);
     await _createAdvertisingTable(db);
 
+    await _insertInitialZsp(db);
     await _insertInitialDistricts(db);
   }
 
@@ -80,16 +83,36 @@ class AppDatabase {
     if (oldVersion < 6) {
       await _upgradeFromVersion5ToVersion6(db);
     }
+
+    if (oldVersion < 7) {
+      await _upgradeFromVersion6ToVersion7(db);
+    }
+  }
+
+  Future<void> _createZspLocationsTable(Database db) async {
+    await db.execute(
+      '''
+      CREATE TABLE zsp_locations (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL UNIQUE,
+        is_default INTEGER NOT NULL DEFAULT 0,
+        is_active INTEGER NOT NULL DEFAULT 1
+      )
+      ''',
+    );
   }
 
   Future<void> _createDistrictsTable(Database db) async {
     await db.execute(
       '''
       CREATE TABLE districts (
-        number INTEGER PRIMARY KEY,
+        zsp_id TEXT NOT NULL,
+        number INTEGER NOT NULL,
         is_active INTEGER NOT NULL DEFAULT 1,
         can_drive_safely INTEGER NOT NULL DEFAULT 0,
-        note TEXT
+        note TEXT,
+        PRIMARY KEY (zsp_id, number),
+        FOREIGN KEY (zsp_id) REFERENCES zsp_locations(id)
       )
       ''',
     );
@@ -102,6 +125,7 @@ class AppDatabase {
         id TEXT PRIMARY KEY,
         date TEXT NOT NULL UNIQUE,
         type TEXT NOT NULL,
+        zsp_id TEXT NOT NULL DEFAULT 'zsp-werneck',
         assignment_type TEXT NOT NULL DEFAULT 'ownDistrict',
         district_id TEXT,
         district_part TEXT NOT NULL DEFAULT 'full',
@@ -114,7 +138,8 @@ class AppDatabase {
         cancelled_package_count INTEGER NOT NULL DEFAULT 0,
         has_advertising INTEGER NOT NULL DEFAULT 0,
         advertising TEXT,
-        notes TEXT
+        notes TEXT,
+        FOREIGN KEY (zsp_id) REFERENCES zsp_locations(id)
       )
       ''',
     );
@@ -127,6 +152,7 @@ class AppDatabase {
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         work_day_id TEXT NOT NULL,
         district TEXT NOT NULL,
+        zsp_id TEXT NOT NULL DEFAULT 'zsp-werneck',
         packages_taken INTEGER NOT NULL DEFAULT 0,
         note TEXT,
         FOREIGN KEY (work_day_id)
@@ -144,6 +170,7 @@ class AppDatabase {
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         work_day_id TEXT NOT NULL,
         district TEXT NOT NULL,
+        zsp_id TEXT NOT NULL DEFAULT 'zsp-werneck',
         district_part TEXT NOT NULL DEFAULT 'full',
         package_count INTEGER NOT NULL DEFAULT 0,
         cancelled_package_count INTEGER NOT NULL DEFAULT 0,
@@ -316,6 +343,80 @@ class AppDatabase {
     await _createAdvertisingTable(db);
   }
 
+  Future<void> _upgradeFromVersion6ToVersion7(Database db) async {
+    await db.transaction((txn) async {
+      await txn.execute(
+        '''
+        CREATE TABLE zsp_locations (
+          id TEXT PRIMARY KEY,
+          name TEXT NOT NULL UNIQUE,
+          is_default INTEGER NOT NULL DEFAULT 0,
+          is_active INTEGER NOT NULL DEFAULT 1
+        )
+        ''',
+      );
+
+      await txn.insert(
+        'zsp_locations',
+        {
+          'id': ZspLocation.werneckId,
+          'name': 'ZSP Werneck',
+          'is_default': 1,
+          'is_active': 1,
+        },
+        conflictAlgorithm: ConflictAlgorithm.ignore,
+      );
+
+      await txn.execute(
+        '''
+        CREATE TABLE districts_v7 (
+          zsp_id TEXT NOT NULL,
+          number INTEGER NOT NULL,
+          is_active INTEGER NOT NULL DEFAULT 1,
+          can_drive_safely INTEGER NOT NULL DEFAULT 0,
+          note TEXT,
+          PRIMARY KEY (zsp_id, number),
+          FOREIGN KEY (zsp_id) REFERENCES zsp_locations(id)
+        )
+        ''',
+      );
+
+      await txn.execute(
+        '''
+        INSERT INTO districts_v7 (zsp_id, number, is_active, can_drive_safely, note)
+        SELECT ?, number, is_active, can_drive_safely, note FROM districts
+        ''',
+        [ZspLocation.werneckId],
+      );
+
+      await txn.execute('DROP TABLE districts');
+      await txn.execute('ALTER TABLE districts_v7 RENAME TO districts');
+
+      await txn.execute(
+        "ALTER TABLE work_days ADD COLUMN zsp_id TEXT NOT NULL DEFAULT '${ZspLocation.werneckId}'",
+      );
+      await txn.execute(
+        "ALTER TABLE own_tour_entries ADD COLUMN zsp_id TEXT NOT NULL DEFAULT '${ZspLocation.werneckId}'",
+      );
+      await txn.execute(
+        "ALTER TABLE support_entries ADD COLUMN zsp_id TEXT NOT NULL DEFAULT '${ZspLocation.werneckId}'",
+      );
+    });
+  }
+
+  Future<void> _insertInitialZsp(Database db) async {
+    await db.insert(
+      'zsp_locations',
+      {
+        'id': ZspLocation.werneckId,
+        'name': 'ZSP Werneck',
+        'is_default': 1,
+        'is_active': 1,
+      },
+      conflictAlgorithm: ConflictAlgorithm.ignore,
+    );
+  }
+
   Future<void> _insertInitialDistricts(Database db) async {
     final batch = db.batch();
 
@@ -323,6 +424,7 @@ class AppDatabase {
       batch.insert(
         'districts',
         {
+          'zsp_id': ZspLocation.werneckId,
           'number': number,
           'is_active': 1,
           'can_drive_safely': 0,
@@ -335,43 +437,129 @@ class AppDatabase {
     await batch.commit(noResult: true);
   }
 
-  Future<List<District>> getDistricts() async {
+  Future<List<ZspLocation>> getZspLocations() async {
     final db = await database;
+    final maps = await db.query(
+      'zsp_locations',
+      orderBy: 'is_default DESC, name COLLATE NOCASE ASC',
+    );
+    return maps.map(ZspLocation.fromMap).toList();
+  }
 
+  Future<ZspLocation?> getDefaultZsp() async {
+    final db = await database;
+    final maps = await db.query(
+      'zsp_locations',
+      where: 'is_default = 1',
+      limit: 1,
+    );
+    if (maps.isEmpty) return null;
+    return ZspLocation.fromMap(maps.first);
+  }
+
+  Future<void> insertZspLocation(ZspLocation location) async {
+    final db = await database;
+    await db.insert(
+      'zsp_locations',
+      location.toMap(),
+      conflictAlgorithm: ConflictAlgorithm.abort,
+    );
+  }
+
+  Future<void> updateZspLocation(ZspLocation location) async {
+    final db = await database;
+    await db.update(
+      'zsp_locations',
+      location.toMap(),
+      where: 'id = ?',
+      whereArgs: [location.id],
+    );
+  }
+
+  Future<void> setDefaultZsp(String id) async {
+    final db = await database;
+    await db.transaction((txn) async {
+      await txn.update('zsp_locations', {'is_default': 0});
+      await txn.update(
+        'zsp_locations',
+        {'is_default': 1, 'is_active': 1},
+        where: 'id = ?',
+        whereArgs: [id],
+      );
+    });
+  }
+
+  Future<List<District>> getDistricts({String? zspId}) async {
+    final db = await database;
     final maps = await db.query(
       'districts',
-      orderBy: 'number ASC',
+      where: zspId == null ? null : 'zsp_id = ?',
+      whereArgs: zspId == null ? null : [zspId],
+      orderBy: 'zsp_id ASC, number ASC',
     );
-
     return maps.map(District.fromMap).toList();
   }
 
-  Future<District?> getDistrict(int number) async {
+  Future<District?> getDistrict(String zspId, int number) async {
     final db = await database;
-
     final maps = await db.query(
       'districts',
-      where: 'number = ?',
-      whereArgs: [number],
+      where: 'zsp_id = ? AND number = ?',
+      whereArgs: [zspId, number],
       limit: 1,
     );
-
-    if (maps.isEmpty) {
-      return null;
-    }
-
+    if (maps.isEmpty) return null;
     return District.fromMap(maps.first);
+  }
+
+  Future<void> insertDistrict(District district) async {
+    final db = await database;
+    await db.insert(
+      'districts',
+      district.toMap(),
+      conflictAlgorithm: ConflictAlgorithm.abort,
+    );
   }
 
   Future<void> updateDistrict(District district) async {
     final db = await database;
-
     await db.update(
       'districts',
       district.toMap(),
-      where: 'number = ?',
-      whereArgs: [district.number],
+      where: 'zsp_id = ? AND number = ?',
+      whereArgs: [district.zspId, district.number],
     );
+  }
+
+  Future<void> replaceDistrictDefinition({
+    required District original,
+    required District replacement,
+  }) async {
+    final db = await database;
+    await db.transaction((txn) async {
+      if (original.zspId == replacement.zspId &&
+          original.number == replacement.number) {
+        await txn.update(
+          'districts',
+          replacement.toMap(),
+          where: 'zsp_id = ? AND number = ?',
+          whereArgs: [original.zspId, original.number],
+        );
+        return;
+      }
+
+      await txn.insert(
+        'districts',
+        replacement.toMap(),
+        conflictAlgorithm: ConflictAlgorithm.abort,
+      );
+      await txn.update(
+        'districts',
+        {'is_active': 0},
+        where: 'zsp_id = ? AND number = ?',
+        whereArgs: [original.zspId, original.number],
+      );
+    });
   }
 
   Future<List<WorkDay>> getWorkDays() async {
@@ -1105,9 +1293,13 @@ class AppDatabase {
       'database_version': _databaseVersion,
       'created_at': DateTime.now().toIso8601String(),
       'tables': {
+        'zsp_locations': await db.query(
+          'zsp_locations',
+          orderBy: 'is_default DESC, name COLLATE NOCASE ASC',
+        ),
         'districts': await db.query(
           'districts',
-          orderBy: 'number ASC',
+          orderBy: 'zsp_id ASC, number ASC',
         ),
         'work_days': await db.query(
           'work_days',
@@ -1193,6 +1385,16 @@ class AppDatabase {
       }).toList();
     }
 
+    final zspLocations = tables['zsp_locations'] is List
+        ? readRows('zsp_locations')
+        : <Map<String, Object?>>[
+            {
+              'id': ZspLocation.werneckId,
+              'name': 'ZSP Werneck',
+              'is_default': 1,
+              'is_active': 1,
+            },
+          ];
     final districts = readRows('districts');
     final workDays = readRows('work_days');
     final ownTourEntries =
@@ -1217,8 +1419,19 @@ class AppDatabase {
       await txn.delete('work_time_settings');
       await txn.delete('advertising');
       await txn.delete('districts');
+      await txn.delete('zsp_locations');
 
-      for (final row in districts) {
+      for (final row in zspLocations) {
+        await txn.insert(
+          'zsp_locations',
+          row,
+          conflictAlgorithm: ConflictAlgorithm.replace,
+        );
+      }
+
+      for (final originalRow in districts) {
+        final row = Map<String, Object?>.from(originalRow);
+        row.putIfAbsent('zsp_id', () => ZspLocation.werneckId);
         await txn.insert(
           'districts',
           row,
@@ -1226,7 +1439,9 @@ class AppDatabase {
         );
       }
 
-      for (final row in workDays) {
+      for (final originalRow in workDays) {
+        final row = Map<String, Object?>.from(originalRow);
+        row.putIfAbsent('zsp_id', () => ZspLocation.werneckId);
         await txn.insert(
           'work_days',
           row,
@@ -1234,7 +1449,9 @@ class AppDatabase {
         );
       }
 
-      for (final row in ownTourEntries) {
+      for (final originalRow in ownTourEntries) {
+        final row = Map<String, Object?>.from(originalRow);
+        row.putIfAbsent('zsp_id', () => ZspLocation.werneckId);
         await txn.insert(
           'own_tour_entries',
           row,
@@ -1242,7 +1459,9 @@ class AppDatabase {
         );
       }
 
-      for (final row in supportEntries) {
+      for (final originalRow in supportEntries) {
+        final row = Map<String, Object?>.from(originalRow);
+        row.putIfAbsent('zsp_id', () => ZspLocation.werneckId);
         await txn.insert(
           'support_entries',
           row,

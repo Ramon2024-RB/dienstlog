@@ -2,6 +2,8 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models/own_tour_entry.dart';
+import '../models/monday_delivery_entry.dart';
+import '../models/package_driver_entry.dart';
 import '../models/support_entry.dart';
 import '../models/work_day.dart';
 import 'app_database.dart';
@@ -21,19 +23,15 @@ class WorkDayNotifier extends AsyncNotifier<List<WorkDay>> {
   @override
   Future<List<WorkDay>> build() async {
     final workDays = await _database.getWorkDays();
-
     await _syncTodayWithWidget();
-
     return workDays;
   }
 
   Future<void> refresh() async {
     state = const AsyncLoading();
-
     state = await AsyncValue.guard(
       () => _database.getWorkDays(),
     );
-
     await _syncTodayWithWidget();
   }
 
@@ -48,9 +46,19 @@ class WorkDayNotifier extends AsyncNotifier<List<WorkDay>> {
   Future<List<OwnTourEntry>> getOwnTourEntries(
     String workDayId,
   ) async {
-    return _database.getOwnTourEntriesForWorkDay(
-      workDayId,
-    );
+    return _database.getOwnTourEntriesForWorkDay(workDayId);
+  }
+
+  Future<List<PackageDriverEntry>> getPackageDriverEntries(
+    String workDayId,
+  ) async {
+    return _database.getPackageDriverEntriesForWorkDay(workDayId);
+  }
+
+  Future<List<MondayDeliveryEntry>> getMondayDeliveryEntries(
+    String workDayId,
+  ) async {
+    return _database.getMondayDeliveryEntriesForWorkDay(workDayId);
   }
 
   Future<List<OwnTourEntry>> getOwnTourEntriesForDateRange(
@@ -66,9 +74,7 @@ class WorkDayNotifier extends AsyncNotifier<List<WorkDay>> {
   Future<int> getTotalOwnTourPackages(
     String workDayId,
   ) async {
-    return _database.getTotalOwnTourPackagesForWorkDay(
-      workDayId,
-    );
+    return _database.getTotalOwnTourPackagesForWorkDay(workDayId);
   }
 
   Future<int> getTotalOwnTourPackagesForDateRange(
@@ -94,17 +100,13 @@ class WorkDayNotifier extends AsyncNotifier<List<WorkDay>> {
   Future<List<SupportEntry>> getSupportEntries(
     String workDayId,
   ) async {
-    return _database.getSupportEntriesForWorkDay(
-      workDayId,
-    );
+    return _database.getSupportEntriesForWorkDay(workDayId);
   }
 
   Future<int> getTotalSupportPackages(
     String workDayId,
   ) async {
-    return _database.getTotalSupportPackagesForWorkDay(
-      workDayId,
-    );
+    return _database.getTotalSupportPackagesForWorkDay(workDayId);
   }
 
   Future<int> getTotalSupportPackagesForDateRange(
@@ -121,6 +123,8 @@ class WorkDayNotifier extends AsyncNotifier<List<WorkDay>> {
     required WorkDay workDay,
     List<OwnTourEntry> ownTourEntries = const [],
     List<SupportEntry> supportEntries = const [],
+    List<PackageDriverEntry> packageDriverEntries = const [],
+    List<MondayDeliveryEntry> mondayDeliveryEntries = const [],
   }) async {
     final previousState = state;
 
@@ -137,18 +141,22 @@ class WorkDayNotifier extends AsyncNotifier<List<WorkDay>> {
         supportEntries,
       );
 
+      await _database.replacePackageDriverEntriesForWorkDay(
+        workDay.id,
+        packageDriverEntries,
+      );
+
+      await _database.replaceMondayDeliveryEntriesForWorkDay(
+        workDay.id,
+        mondayDeliveryEntries,
+      );
+
       final workDays = await _database.getWorkDays();
-
       state = AsyncData(workDays);
-
       await _syncTodayWithWidget();
     } catch (error, stackTrace) {
       state = previousState;
-
-      Error.throwWithStackTrace(
-        error,
-        stackTrace,
-      );
+      Error.throwWithStackTrace(error, stackTrace);
     }
   }
 
@@ -156,6 +164,8 @@ class WorkDayNotifier extends AsyncNotifier<List<WorkDay>> {
     required WorkDay workDay,
     List<OwnTourEntry>? ownTourEntries,
     List<SupportEntry>? supportEntries,
+    List<PackageDriverEntry>? packageDriverEntries,
+    List<MondayDeliveryEntry>? mondayDeliveryEntries,
   }) async {
     final previousState = state;
 
@@ -176,18 +186,26 @@ class WorkDayNotifier extends AsyncNotifier<List<WorkDay>> {
         );
       }
 
+      if (packageDriverEntries != null) {
+        await _database.replacePackageDriverEntriesForWorkDay(
+          workDay.id,
+          packageDriverEntries,
+        );
+      }
+
+      if (mondayDeliveryEntries != null) {
+        await _database.replaceMondayDeliveryEntriesForWorkDay(
+          workDay.id,
+          mondayDeliveryEntries,
+        );
+      }
+
       final workDays = await _database.getWorkDays();
-
       state = AsyncData(workDays);
-
       await _syncTodayWithWidget();
     } catch (error, stackTrace) {
       state = previousState;
-
-      Error.throwWithStackTrace(
-        error,
-        stackTrace,
-      );
+      Error.throwWithStackTrace(error, stackTrace);
     }
   }
 
@@ -196,37 +214,22 @@ class WorkDayNotifier extends AsyncNotifier<List<WorkDay>> {
 
     try {
       await _database.deleteWorkDay(id);
-
       final workDays = await _database.getWorkDays();
-
       state = AsyncData(workDays);
-
       await _syncTodayWithWidget();
     } catch (error, stackTrace) {
       state = previousState;
-
-      Error.throwWithStackTrace(
-        error,
-        stackTrace,
-      );
+      Error.throwWithStackTrace(error, stackTrace);
     }
   }
 
   Future<void> _syncTodayWithWidget() async {
     final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
 
-    final today = DateTime(
-      now.year,
-      now.month,
-      now.day,
-    );
+    final workDay = await _database.getWorkDayByDate(today);
 
-    final workDay = await _database.getWorkDayByDate(
-      today,
-    );
-
-    if (workDay == null ||
-        !workDay.isWorkDay) {
+    if (workDay == null || !workDay.isWorkDay) {
       await _clearWidgetSafely();
       return;
     }
@@ -236,18 +239,10 @@ class WorkDayNotifier extends AsyncNotifier<List<WorkDay>> {
         'updateWidget',
         {
           'date': _formatDate(today),
-          'workStart': _formatMinutes(
-            workDay.workStart,
-          ),
-          'deliveryStart': _formatMinutes(
-            workDay.departureTime,
-          ),
-          'deliveryEnd': _formatMinutes(
-            workDay.deliveryEnd,
-          ),
-          'workEnd': _formatMinutes(
-            workDay.workEnd,
-          ),
+          'workStart': _formatMinutes(workDay.workStart),
+          'deliveryStart': _formatMinutes(workDay.departureTime),
+          'deliveryEnd': _formatMinutes(workDay.deliveryEnd),
+          'workEnd': _formatMinutes(workDay.workEnd),
         },
       );
     } on MissingPluginException {
@@ -261,9 +256,7 @@ class WorkDayNotifier extends AsyncNotifier<List<WorkDay>> {
 
   Future<void> _clearWidgetSafely() async {
     try {
-      await _widgetChannel.invokeMethod<void>(
-        'clearWidget',
-      );
+      await _widgetChannel.invokeMethod<void>('clearWidget');
     } on MissingPluginException {
       // Keine Widget-Bridge auf dieser Plattform.
     } on PlatformException {
@@ -279,35 +272,16 @@ class WorkDayNotifier extends AsyncNotifier<List<WorkDay>> {
     final hours = minutes ~/ 60;
     final remainingMinutes = minutes % 60;
 
-    final hourText = hours.toString().padLeft(
-          2,
-          '0',
-        );
-
-    final minuteText =
-        remainingMinutes.toString().padLeft(
-              2,
-              '0',
-            );
+    final hourText = hours.toString().padLeft(2, '0');
+    final minuteText = remainingMinutes.toString().padLeft(2, '0');
 
     return '$hourText:$minuteText';
   }
 
   String _formatDate(DateTime date) {
-    final year = date.year.toString().padLeft(
-          4,
-          '0',
-        );
-
-    final month = date.month.toString().padLeft(
-          2,
-          '0',
-        );
-
-    final day = date.day.toString().padLeft(
-          2,
-          '0',
-        );
+    final year = date.year.toString().padLeft(4, '0');
+    final month = date.month.toString().padLeft(2, '0');
+    final day = date.day.toString().padLeft(2, '0');
 
     return '$year-$month-$day';
   }

@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../models/advertising.dart';
 import '../../models/own_tour_entry.dart';
 import '../../models/work_day.dart';
+import '../../services/advertising_provider.dart';
 import '../../services/work_day_provider.dart';
 
 enum QuickEntryExternalAction {
@@ -383,6 +385,9 @@ class _QuickEntryCardState
       return;
     }
 
+    final advertisings =
+        ref.read(advertisingProvider).value ?? const <Advertising>[];
+
     final initialDistrict =
         initialOwnTours.isNotEmpty
             ? initialOwnTours.first.district
@@ -403,8 +408,17 @@ class _QuickEntryCardState
         return _DeliveryStartSheet(
           initialDistrict: initialDistrict,
           initialPackages: initialPackages,
+          initialPostPart:
+              existing?.districtPart == DistrictPart.partA ||
+                      existing?.districtPart == DistrictPart.partB
+                  ? existing!.districtPart
+                  : null,
           initialAdvertising:
               existing?.hasAdvertising ?? false,
+          initialAdvertisingName:
+              existing?.advertising,
+          advertisingNames:
+              advertisings.map((item) => item.name).toList(),
         );
       },
     );
@@ -420,9 +434,15 @@ class _QuickEntryCardState
     final existingTime =
         existing?.departureTime;
 
+    final postText = result.postPart == DistrictPart.partA
+        ? 'Post A-Teil'
+        : 'Post B-Teil';
+
     final advertisingText =
         result.hasAdvertising
-            ? 'Werbung'
+            ? (result.advertising?.trim().isNotEmpty == true
+                ? 'Werbung: ${result.advertising!.trim()}'
+                : 'Werbung dabei')
             : 'Keine Werbung';
 
     final confirmed = await _confirm(
@@ -431,10 +451,12 @@ class _QuickEntryCardState
       message: existingTime == null
           ? 'Bezirk ${result.district} · '
               '${result.packages} Pakete · '
+              '$postText · '
               '$advertisingText\n'
               '${_formatTime(previewMinutes)} Uhr'
           : 'Bezirk ${result.district} · '
               '${result.packages} Pakete · '
+              '$postText · '
               '$advertisingText\n\n'
               'Bereits: ${_formatTime(existingTime)} Uhr\n'
               'Neu: ${_formatTime(previewMinutes)} Uhr',
@@ -481,11 +503,14 @@ class _QuickEntryCardState
       assignmentType:
           WorkAssignmentType.ownDistrict,
       districtId: result.district,
-      districtPart: DistrictPart.full,
+      districtPart: result.postPart,
       departureTime: minutes,
       packageCount: result.packages,
       cancelledPackageCount: 0,
       hasAdvertising: result.hasAdvertising,
+      advertising: result.hasAdvertising
+          ? result.advertising
+          : null,
       clearAdvertising:
           !result.hasAdvertising,
     );
@@ -493,7 +518,7 @@ class _QuickEntryCardState
     final ownTour = OwnTourEntry(
       workDayId: updated.id,
       district: result.district,
-      districtPart: DistrictPart.full,
+      districtPart: result.postPart,
       packageCount: result.packages,
       cancelledPackageCount: 0,
     );
@@ -968,114 +993,100 @@ class _QuickActionTile extends StatelessWidget {
   }
 }
 
-class _DeliveryStartSheet
-    extends StatefulWidget {
+class _DeliveryStartSheet extends StatefulWidget {
   const _DeliveryStartSheet({
     required this.initialDistrict,
     required this.initialPackages,
+    required this.initialPostPart,
     required this.initialAdvertising,
+    required this.initialAdvertisingName,
+    required this.advertisingNames,
   });
 
   final String? initialDistrict;
   final int initialPackages;
+  final DistrictPart? initialPostPart;
   final bool initialAdvertising;
+  final String? initialAdvertisingName;
+  final List<String> advertisingNames;
 
   @override
-  State<_DeliveryStartSheet> createState() =>
-      _DeliveryStartSheetState();
+  State<_DeliveryStartSheet> createState() => _DeliveryStartSheetState();
 }
 
-class _DeliveryStartSheetState
-    extends State<_DeliveryStartSheet> {
-  late final TextEditingController
-      _districtController;
-
-  late final TextEditingController
-      _packageController;
-
+class _DeliveryStartSheetState extends State<_DeliveryStartSheet> {
+  static const _otherAdvertisingValue = '__other__';
+  late final TextEditingController _districtController;
+  late final TextEditingController _packageController;
+  late final TextEditingController _customAdvertisingController;
+  DistrictPart? _postPart;
   late bool _hasAdvertising;
+  String? _selectedAdvertising;
 
   @override
   void initState() {
     super.initState();
-
-    _districtController =
-        TextEditingController(
-      text: widget.initialDistrict ?? '',
+    _districtController = TextEditingController(text: widget.initialDistrict ?? '');
+    _packageController = TextEditingController(
+      text: widget.initialPackages > 0 ? widget.initialPackages.toString() : '',
     );
-
-    _packageController =
-        TextEditingController(
-      text: widget.initialPackages > 0
-          ? widget.initialPackages.toString()
-          : '',
-    );
-
-    _hasAdvertising =
-        widget.initialAdvertising;
+    _customAdvertisingController = TextEditingController();
+    _postPart = widget.initialPostPart;
+    _hasAdvertising = widget.initialAdvertising;
+    final name = widget.initialAdvertisingName?.trim();
+    if (_hasAdvertising && name != null && name.isNotEmpty) {
+      if (widget.advertisingNames.contains(name)) {
+        _selectedAdvertising = name;
+      } else {
+        _selectedAdvertising = _otherAdvertisingValue;
+        _customAdvertisingController.text = name;
+      }
+    }
   }
 
   @override
   void dispose() {
     _districtController.dispose();
     _packageController.dispose();
+    _customAdvertisingController.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    final bottomInset =
-        MediaQuery.viewInsetsOf(context).bottom;
-
+    final bottomInset = MediaQuery.viewInsetsOf(context).bottom;
     return Padding(
-      padding: EdgeInsets.fromLTRB(
-        20,
-        8,
-        20,
-        20 + bottomInset,
-      ),
+      padding: EdgeInsets.fromLTRB(20, 8, 20, 20 + bottomInset),
       child: SingleChildScrollView(
         child: Column(
-          crossAxisAlignment:
-              CrossAxisAlignment.start,
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Center(
               child: Container(
                 width: 40,
                 height: 4,
-                margin: const EdgeInsets.only(
-                  bottom: 20,
-                ),
+                margin: const EdgeInsets.only(bottom: 20),
                 decoration: BoxDecoration(
-                  color: Theme.of(context)
-                      .colorScheme
-                      .outlineVariant,
-                  borderRadius:
-                      BorderRadius.circular(2),
+                  color: Theme.of(context).colorScheme.outlineVariant,
+                  borderRadius: BorderRadius.circular(2),
                 ),
               ),
             ),
             Text(
               'Zustellung starten',
-              style: Theme.of(context)
-                  .textTheme
-                  .headlineSmall
-                  ?.copyWith(
+              style: Theme.of(context).textTheme.headlineSmall?.copyWith(
                     fontWeight: FontWeight.bold,
                   ),
             ),
             const SizedBox(height: 6),
             Text(
-              'Bezirk und Paketmenge eintragen. Die Uhrzeit wird erst beim endgültigen Speichern übernommen.',
-              style: Theme.of(context)
-                  .textTheme
-                  .bodyMedium,
+              'Bezirk, Paketmenge, Post und Werbung eintragen. Die Uhrzeit wird erst beim endgültigen Speichern übernommen.',
+              style: Theme.of(context).textTheme.bodyMedium,
             ),
             const SizedBox(height: 24),
             TextField(
               controller: _districtController,
-              keyboardType:
-                  TextInputType.number,
+              keyboardType: TextInputType.number,
               decoration: const InputDecoration(
                 border: OutlineInputBorder(),
                 labelText: 'Bezirk',
@@ -1085,41 +1096,89 @@ class _DeliveryStartSheetState
             const SizedBox(height: 16),
             TextField(
               controller: _packageController,
-              keyboardType:
-                  TextInputType.number,
+              keyboardType: TextInputType.number,
               decoration: const InputDecoration(
                 border: OutlineInputBorder(),
                 labelText: 'Pakete',
                 hintText: 'z. B. 126',
               ),
             ),
+            const SizedBox(height: 16),
+            DropdownButtonFormField<DistrictPart>(
+              initialValue: _postPart,
+              decoration: const InputDecoration(
+                border: OutlineInputBorder(),
+                labelText: 'Post',
+                helperText: 'A- oder B-Teil für den gesamten Arbeitstag.',
+              ),
+              items: const [
+                DropdownMenuItem(value: DistrictPart.partA, child: Text('A-Teil')),
+                DropdownMenuItem(value: DistrictPart.partB, child: Text('B-Teil')),
+              ],
+              onChanged: (value) => setState(() => _postPart = value),
+            ),
             const SizedBox(height: 10),
             SwitchListTile(
               contentPadding: EdgeInsets.zero,
-              title: const Text('Werbung'),
-              subtitle: Text(
-                _hasAdvertising
-                    ? 'Werbung dabei'
-                    : 'Keine Werbung',
-              ),
+              title: const Text('Werbung mitgenommen'),
+              subtitle: Text(_hasAdvertising ? 'Werbung dabei' : 'Keine Werbung'),
               value: _hasAdvertising,
               onChanged: (value) {
                 setState(() {
                   _hasAdvertising = value;
+                  if (!value) {
+                    _selectedAdvertising = null;
+                    _customAdvertisingController.clear();
+                  }
                 });
               },
             ),
+            if (_hasAdvertising) ...[
+              const SizedBox(height: 8),
+              DropdownButtonFormField<String>(
+                key: ValueKey('quick-advertising-$_selectedAdvertising-${widget.advertisingNames.length}'),
+                initialValue: _selectedAdvertising,
+                decoration: const InputDecoration(
+                  border: OutlineInputBorder(),
+                  labelText: 'Welche Werbung?',
+                ),
+                items: [
+                  ...widget.advertisingNames.map(
+                    (name) => DropdownMenuItem<String>(value: name, child: Text(name)),
+                  ),
+                  const DropdownMenuItem<String>(
+                    value: _otherAdvertisingValue,
+                    child: Text('+ Andere Werbung eingeben'),
+                  ),
+                ],
+                onChanged: (value) {
+                  setState(() {
+                    _selectedAdvertising = value;
+                    if (value != _otherAdvertisingValue) {
+                      _customAdvertisingController.clear();
+                    }
+                  });
+                },
+              ),
+              if (_selectedAdvertising == _otherAdvertisingValue) ...[
+                const SizedBox(height: 12),
+                TextField(
+                  controller: _customAdvertisingController,
+                  decoration: const InputDecoration(
+                    border: OutlineInputBorder(),
+                    labelText: 'Andere Werbung',
+                    hintText: 'Name der Werbung',
+                  ),
+                ),
+              ],
+            ],
             const SizedBox(height: 20),
             SizedBox(
               width: double.infinity,
               child: FilledButton.icon(
                 onPressed: _continue,
-                icon: const Icon(
-                  Icons.arrow_forward,
-                ),
-                label: const Text(
-                  'Weiter zur Bestätigung',
-                ),
+                icon: const Icon(Icons.arrow_forward),
+                label: const Text('Weiter zur Bestätigung'),
               ),
             ),
           ],
@@ -1129,42 +1188,49 @@ class _DeliveryStartSheetState
   }
 
   void _continue() {
-    final district =
-        _districtController.text.trim();
-
-    final packages = int.tryParse(
-      _packageController.text.trim(),
-    );
-
+    final district = _districtController.text.trim();
+    final packages = int.tryParse(_packageController.text.trim());
     if (district.isEmpty) {
-      _showError(
-        'Bitte einen Bezirk eintragen.',
-      );
+      _showError('Bitte einen Bezirk eintragen.');
       return;
     }
-
     if (packages == null || packages < 0) {
-      _showError(
-        'Bitte eine gültige Paketanzahl eintragen.',
-      );
+      _showError('Bitte eine gültige Paketanzahl eintragen.');
       return;
     }
-
+    if (_postPart != DistrictPart.partA && _postPart != DistrictPart.partB) {
+      _showError('Bitte Post A-Teil oder B-Teil auswählen.');
+      return;
+    }
+    String? advertising;
+    if (_hasAdvertising) {
+      if (_selectedAdvertising == null) {
+        _showError('Bitte wähle aus, welche Werbung du dabei hast.');
+        return;
+      }
+      if (_selectedAdvertising == _otherAdvertisingValue) {
+        advertising = _customAdvertisingController.text.trim();
+        if (advertising.isEmpty) {
+          _showError('Bitte gib den Namen der Werbung ein.');
+          return;
+        }
+      } else {
+        advertising = _selectedAdvertising;
+      }
+    }
     Navigator.of(context).pop(
       _DeliveryStartResult(
         district: district,
         packages: packages,
+        postPart: _postPart!,
         hasAdvertising: _hasAdvertising,
+        advertising: advertising,
       ),
     );
   }
 
   void _showError(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-      ),
-    );
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
   }
 }
 
@@ -1172,12 +1238,16 @@ class _DeliveryStartResult {
   const _DeliveryStartResult({
     required this.district,
     required this.packages,
+    required this.postPart,
     required this.hasAdvertising,
+    required this.advertising,
   });
 
   final String district;
   final int packages;
+  final DistrictPart postPart;
   final bool hasAdvertising;
+  final String? advertising;
 }
 
 class _DeliveryEndSheet

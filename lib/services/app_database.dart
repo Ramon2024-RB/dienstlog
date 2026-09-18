@@ -4,6 +4,8 @@ import 'package:sqflite/sqflite.dart';
 import '../models/advertising.dart';
 import '../models/district.dart';
 import '../models/own_tour_entry.dart';
+import '../models/monday_delivery_entry.dart';
+import '../models/package_driver_entry.dart';
 import '../models/support_entry.dart';
 import '../models/work_day.dart';
 import '../models/work_schedule_entry.dart';
@@ -17,7 +19,7 @@ class AppDatabase {
   static Database? _database;
 
   static const String _databaseName = 'dienstlog.db';
-  static const int _databaseVersion = 7;
+  static const int _databaseVersion = 9;
 
   Future<Database> get database async {
     if (_database != null) {
@@ -51,6 +53,8 @@ class AppDatabase {
     await _createWorkDaysTable(db);
     await _createSupportEntriesTable(db);
     await _createOwnTourEntriesTable(db);
+    await _createPackageDriverEntriesTable(db);
+    await _createMondayDeliveryEntriesTable(db);
     await _createWorkScheduleEntriesTable(db);
     await _createWorkTimeSettingsTable(db);
     await _createAdvertisingTable(db);
@@ -86,6 +90,13 @@ class AppDatabase {
 
     if (oldVersion < 7) {
       await _upgradeFromVersion6ToVersion7(db);
+    }
+    if (oldVersion < 8) {
+      await _upgradeFromVersion7ToVersion8(db);
+    }
+
+    if (oldVersion < 9) {
+      await _upgradeFromVersion8ToVersion9(db);
     }
   }
 
@@ -136,6 +147,8 @@ class AppDatabase {
         break_minutes INTEGER NOT NULL DEFAULT 0,
         package_count INTEGER NOT NULL DEFAULT 0,
         cancelled_package_count INTEGER NOT NULL DEFAULT 0,
+        package_driver_package_count INTEGER NOT NULL DEFAULT 0,
+        monday_delivery_package_count INTEGER NOT NULL DEFAULT 0,
         has_advertising INTEGER NOT NULL DEFAULT 0,
         advertising TEXT,
         notes TEXT,
@@ -177,6 +190,34 @@ class AppDatabase {
         FOREIGN KEY (work_day_id)
           REFERENCES work_days(id)
           ON DELETE CASCADE
+      )
+      ''',
+    );
+  }
+
+  Future<void> _createPackageDriverEntriesTable(Database db) async {
+    await db.execute(
+      '''
+      CREATE TABLE package_driver_entries (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        work_day_id TEXT NOT NULL,
+        district TEXT NOT NULL,
+        zsp_id TEXT NOT NULL DEFAULT 'zsp-werneck',
+        FOREIGN KEY (work_day_id) REFERENCES work_days(id) ON DELETE CASCADE
+      )
+      ''',
+    );
+  }
+
+  Future<void> _createMondayDeliveryEntriesTable(Database db) async {
+    await db.execute(
+      '''
+      CREATE TABLE monday_delivery_entries (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        work_day_id TEXT NOT NULL,
+        district TEXT NOT NULL,
+        zsp_id TEXT NOT NULL DEFAULT 'zsp-werneck',
+        FOREIGN KEY (work_day_id) REFERENCES work_days(id) ON DELETE CASCADE
       )
       ''',
     );
@@ -400,6 +441,62 @@ class AppDatabase {
       );
       await txn.execute(
         "ALTER TABLE support_entries ADD COLUMN zsp_id TEXT NOT NULL DEFAULT '${ZspLocation.werneckId}'",
+      );
+    });
+  }
+
+  Future<void> _upgradeFromVersion7ToVersion8(Database db) async {
+    await db.transaction((txn) async {
+      await txn.execute(
+        '''
+        ALTER TABLE work_days
+        ADD COLUMN package_driver_package_count INTEGER NOT NULL DEFAULT 0
+        ''',
+      );
+      await txn.execute(
+        '''
+        CREATE TABLE package_driver_entries (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          work_day_id TEXT NOT NULL,
+          district TEXT NOT NULL,
+          zsp_id TEXT NOT NULL DEFAULT 'zsp-werneck',
+          FOREIGN KEY (work_day_id) REFERENCES work_days(id) ON DELETE CASCADE
+        )
+        ''',
+      );
+      await txn.execute(
+        '''
+        INSERT INTO package_driver_entries (work_day_id, district, zsp_id)
+        SELECT DISTINCT se.work_day_id, se.district, se.zsp_id
+        FROM support_entries se
+        INNER JOIN work_days wd ON wd.id = se.work_day_id
+        WHERE wd.type = 'work'
+          AND wd.assignment_type = 'packageDriver'
+          AND TRIM(se.district) != ''
+        ''',
+      );
+    });
+  }
+
+  Future<void> _upgradeFromVersion8ToVersion9(Database db) async {
+    await db.transaction((txn) async {
+      await txn.execute(
+        '''
+        ALTER TABLE work_days
+        ADD COLUMN monday_delivery_package_count INTEGER NOT NULL DEFAULT 0
+        ''',
+      );
+
+      await txn.execute(
+        '''
+        CREATE TABLE monday_delivery_entries (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          work_day_id TEXT NOT NULL,
+          district TEXT NOT NULL,
+          zsp_id TEXT NOT NULL DEFAULT 'zsp-werneck',
+          FOREIGN KEY (work_day_id) REFERENCES work_days(id) ON DELETE CASCADE
+        )
+        ''',
       );
     });
   }
@@ -649,6 +746,17 @@ class AppDatabase {
         where: 'work_day_id = ?',
         whereArgs: [id],
       );
+      await txn.delete(
+        'package_driver_entries',
+        where: 'work_day_id = ?',
+        whereArgs: [id],
+      );
+
+      await txn.delete(
+        'monday_delivery_entries',
+        where: 'work_day_id = ?',
+        whereArgs: [id],
+      );
 
       await txn.delete(
         'work_days',
@@ -891,6 +999,83 @@ class AppDatabase {
     return _readIntValue(
       result.first['total'],
     );
+  }
+
+  Future<List<PackageDriverEntry>> getPackageDriverEntriesForWorkDay(
+    String workDayId,
+  ) async {
+    final db = await database;
+    final maps = await db.query(
+      'package_driver_entries',
+      where: 'work_day_id = ?',
+      whereArgs: [workDayId],
+      orderBy: 'id ASC',
+    );
+    return maps.map(PackageDriverEntry.fromMap).toList();
+  }
+
+  Future<void> replacePackageDriverEntriesForWorkDay(
+    String workDayId,
+    List<PackageDriverEntry> entries,
+  ) async {
+    final db = await database;
+    await db.transaction((txn) async {
+      await txn.delete(
+        'package_driver_entries',
+        where: 'work_day_id = ?',
+        whereArgs: [workDayId],
+      );
+      for (final entry in entries) {
+        final map = entry.copyWith(workDayId: workDayId, clearId: true).toMap()
+          ..remove('id');
+        await txn.insert('package_driver_entries', map);
+      }
+    });
+  }
+
+  Future<List<MondayDeliveryEntry>> getMondayDeliveryEntriesForWorkDay(
+    String workDayId,
+  ) async {
+    final db = await database;
+
+    final maps = await db.query(
+      'monday_delivery_entries',
+      where: 'work_day_id = ?',
+      whereArgs: [workDayId],
+      orderBy: 'id ASC',
+    );
+
+    return maps.map(MondayDeliveryEntry.fromMap).toList();
+  }
+
+  Future<void> replaceMondayDeliveryEntriesForWorkDay(
+    String workDayId,
+    List<MondayDeliveryEntry> entries,
+  ) async {
+    final db = await database;
+
+    await db.transaction((txn) async {
+      await txn.delete(
+        'monday_delivery_entries',
+        where: 'work_day_id = ?',
+        whereArgs: [workDayId],
+      );
+
+      for (final entry in entries) {
+        final map = entry
+            .copyWith(
+              workDayId: workDayId,
+              clearId: true,
+            )
+            .toMap()
+          ..remove('id');
+
+        await txn.insert(
+          'monday_delivery_entries',
+          map,
+        );
+      }
+    });
   }
 
   Future<List<SupportEntry>> getSupportEntriesForWorkDay(
@@ -1313,6 +1498,14 @@ class AppDatabase {
           'support_entries',
           orderBy: 'id ASC',
         ),
+        'package_driver_entries': await db.query(
+          'package_driver_entries',
+          orderBy: 'id ASC',
+        ),
+        'monday_delivery_entries': await db.query(
+          'monday_delivery_entries',
+          orderBy: 'id ASC',
+        ),
         'work_schedule_entries': await db.query(
           'work_schedule_entries',
           orderBy: 'date ASC',
@@ -1401,6 +1594,12 @@ class AppDatabase {
         readRows('own_tour_entries');
     final supportEntries =
         readRows('support_entries');
+    final packageDriverEntries = tables['package_driver_entries'] is List
+        ? readRows('package_driver_entries')
+        : <Map<String, Object?>>[];
+    final mondayDeliveryEntries = tables['monday_delivery_entries'] is List
+        ? readRows('monday_delivery_entries')
+        : <Map<String, Object?>>[];
     final workScheduleEntries =
         readRows('work_schedule_entries');
     final workTimeSettings =
@@ -1414,6 +1613,8 @@ class AppDatabase {
     await db.transaction((txn) async {
       await txn.delete('own_tour_entries');
       await txn.delete('support_entries');
+      await txn.delete('package_driver_entries');
+      await txn.delete('monday_delivery_entries');
       await txn.delete('work_days');
       await txn.delete('work_schedule_entries');
       await txn.delete('work_time_settings');
@@ -1442,6 +1643,8 @@ class AppDatabase {
       for (final originalRow in workDays) {
         final row = Map<String, Object?>.from(originalRow);
         row.putIfAbsent('zsp_id', () => ZspLocation.werneckId);
+        row.putIfAbsent('package_driver_package_count', () => 0);
+        row.putIfAbsent('monday_delivery_package_count', () => 0);
         await txn.insert(
           'work_days',
           row,
@@ -1464,6 +1667,26 @@ class AppDatabase {
         row.putIfAbsent('zsp_id', () => ZspLocation.werneckId);
         await txn.insert(
           'support_entries',
+          row,
+          conflictAlgorithm: ConflictAlgorithm.replace,
+        );
+      }
+
+      for (final originalRow in packageDriverEntries) {
+        final row = Map<String, Object?>.from(originalRow);
+        row.putIfAbsent('zsp_id', () => ZspLocation.werneckId);
+        await txn.insert(
+          'package_driver_entries',
+          row,
+          conflictAlgorithm: ConflictAlgorithm.replace,
+        );
+      }
+
+      for (final originalRow in mondayDeliveryEntries) {
+        final row = Map<String, Object?>.from(originalRow);
+        row.putIfAbsent('zsp_id', () => ZspLocation.werneckId);
+        await txn.insert(
+          'monday_delivery_entries',
           row,
           conflictAlgorithm: ConflictAlgorithm.replace,
         );

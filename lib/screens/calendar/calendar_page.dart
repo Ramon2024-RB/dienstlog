@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../models/own_tour_entry.dart';
+import '../../models/package_driver_entry.dart';
+import '../../models/monday_delivery_entry.dart';
 import '../../models/support_entry.dart';
 import '../../models/work_day.dart';
 import '../../services/work_day_provider.dart';
@@ -139,6 +141,16 @@ class _CalendarPageState extends ConsumerState<CalendarPage> {
         existingWorkDay.id,
       );
 
+      final packageDriverEntries =
+          await notifier.getPackageDriverEntries(
+        existingWorkDay.id,
+      );
+
+      final mondayDeliveryEntries =
+          await notifier.getMondayDeliveryEntries(
+        existingWorkDay.id,
+      );
+
       if (!mounted) {
         return;
       }
@@ -152,6 +164,8 @@ class _CalendarPageState extends ConsumerState<CalendarPage> {
             workDay: existingWorkDay,
             ownTourEntries: ownTourEntries,
             supportEntries: supportEntries,
+            packageDriverEntries: packageDriverEntries,
+            mondayDeliveryEntries: mondayDeliveryEntries,
           );
         },
       );
@@ -169,6 +183,8 @@ class _CalendarPageState extends ConsumerState<CalendarPage> {
                 existingWorkDay: existingWorkDay,
                 initialOwnTourEntries: ownTourEntries,
                 initialSupportEntries: supportEntries,
+                initialPackageDriverEntries: packageDriverEntries,
+                initialMondayDeliveryEntries: mondayDeliveryEntries,
               );
             },
           ),
@@ -781,6 +797,11 @@ class _CalendarDayCell extends StatelessWidget {
           return Icons.local_shipping_outlined;
         }
 
+        if (workDay.assignmentType ==
+            WorkAssignmentType.mondayDelivery) {
+          return Icons.calendar_view_week_outlined;
+        }
+
         return Icons.work_outline;
 
       case WorkDayType.free:
@@ -808,11 +829,15 @@ class _ExistingWorkDaySheet extends StatelessWidget {
     required this.workDay,
     required this.ownTourEntries,
     required this.supportEntries,
+    required this.packageDriverEntries,
+    required this.mondayDeliveryEntries,
   });
 
   final WorkDay workDay;
   final List<OwnTourEntry> ownTourEntries;
   final List<SupportEntry> supportEntries;
+  final List<PackageDriverEntry> packageDriverEntries;
+  final List<MondayDeliveryEntry> mondayDeliveryEntries;
 
   @override
   Widget build(BuildContext context) {
@@ -866,6 +891,56 @@ class _ExistingWorkDaySheet extends StatelessWidget {
                           workDay.workDurationMinutes!,
                         ),
                 ),
+                if (workDay.assignmentType ==
+                    WorkAssignmentType.mondayDelivery) ...[
+                  const SizedBox(height: 20),
+                  Text(
+                    'Montagszustellung',
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.bold,
+                        ),
+                  ),
+                  const SizedBox(height: 10),
+                  if (mondayDeliveryEntries.isNotEmpty) ...[
+                    _DetailInfoCard(
+                      icon: Icons.route_outlined,
+                      title: mondayDeliveryEntries
+                          .map((entry) => 'Bezirk ${entry.district}')
+                          .join(' · '),
+                    ),
+                    const SizedBox(height: 8),
+                  ],
+                  _DetailInfoCard(
+                    icon: Icons.inventory_2_outlined,
+                    title:
+                        '${workDay.mondayDeliveryPackageCount} Pakete gesamt',
+                  ),
+                ],
+                if (workDay.assignmentType ==
+                    WorkAssignmentType.packageDriver) ...[
+                  const SizedBox(height: 20),
+                  Text(
+                    'Paketfahrer',
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.bold,
+                        ),
+                  ),
+                  const SizedBox(height: 10),
+                  if (packageDriverEntries.isNotEmpty) ...[
+                    _DetailInfoCard(
+                      icon: Icons.route_outlined,
+                      title: packageDriverEntries
+                          .map((entry) => 'Bezirk ${entry.district}')
+                          .join(' · '),
+                    ),
+                    const SizedBox(height: 8),
+                  ],
+                  _DetailInfoCard(
+                    icon: Icons.inventory_2_outlined,
+                    title:
+                        '${workDay.packageDriverPackageCount} Pakete gesamt',
+                  ),
+                ],
                 if (ownTourEntries.isNotEmpty) ...[
                   const SizedBox(height: 20),
                   Text(
@@ -875,6 +950,11 @@ class _ExistingWorkDaySheet extends StatelessWidget {
                         ),
                   ),
                   const SizedBox(height: 10),
+                  _DetailInfoCard(
+                    icon: Icons.mail_outline,
+                    title: _postPartLabel(workDay.districtPart),
+                  ),
+                  const SizedBox(height: 8),
                   for (final entry in ownTourEntries) ...[
                     _TourDetailCard(
                       icon: Icons.route_outlined,
@@ -896,6 +976,11 @@ class _ExistingWorkDaySheet extends StatelessWidget {
                         ),
                   ),
                   const SizedBox(height: 10),
+                  _DetailInfoCard(
+                    icon: Icons.mail_outline,
+                    title: _postPartLabel(workDay.districtPart),
+                  ),
+                  const SizedBox(height: 8),
                   _TourDetailCard(
                     icon: Icons.route_outlined,
                     title: workDay.districtId == null
@@ -997,7 +1082,12 @@ class _ExistingWorkDaySheet extends StatelessWidget {
       case WorkDayType.work:
         if (workDay.assignmentType ==
             WorkAssignmentType.packageDriver) {
-          return 'Paketfahrer / Unterstützung';
+          return 'Paketfahrer';
+        }
+
+        if (workDay.assignmentType ==
+            WorkAssignmentType.mondayDelivery) {
+          return 'Montagszustellung';
         }
 
         if (workDay.districtId == null) {
@@ -1398,6 +1488,17 @@ String _formatClockTime(int? minutes) {
 
   return '${hours.toString().padLeft(2, '0')}:'
       '${remainingMinutes.toString().padLeft(2, '0')} Uhr';
+}
+
+String _postPartLabel(DistrictPart part) {
+  switch (part) {
+    case DistrictPart.partA:
+      return 'Post: A-Teil';
+    case DistrictPart.partB:
+      return 'Post: B-Teil';
+    case DistrictPart.full:
+      return 'Post: nicht angegeben';
+  }
 }
 
 String _formatDate(DateTime date) {

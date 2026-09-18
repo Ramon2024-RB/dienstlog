@@ -4,9 +4,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../models/own_tour_entry.dart';
 import '../../models/work_day.dart';
 import '../../models/zsp_location.dart';
+import '../../services/app_settings_provider.dart';
 import '../../services/work_day_provider.dart';
 import '../../services/zsp_provider.dart';
 import '../../utils/work_time_balance_calculator.dart';
+import 'district_analysis_page.dart';
 
 enum StatisticsPeriod {
   week,
@@ -172,12 +174,21 @@ class _StatisticsPageState
           WorkAssignmentType.packageDriver,
     ).length;
 
-    final ownDistrictDays =
+    final ownDistrictWorkDays =
         filteredWorkDays.where(
       (workDay) =>
           workDay.assignmentType ==
           WorkAssignmentType.ownDistrict,
-    ).length;
+    ).toList();
+
+    final ownDistrictDays =
+        ownDistrictWorkDays.length;
+
+    final extendedAnalyticsEnabled = ref
+            .watch(appSettingsProvider)
+            .value
+            ?.extendedAnalyticsEnabled ??
+        false;
 
     return ListView(
       padding: const EdgeInsets.fromLTRB(
@@ -364,6 +375,9 @@ class _StatisticsPageState
         _PackageDistrictStatistics(
           startDate: dateRange.start,
           endDate: dateRange.end,
+          workDays: ownDistrictWorkDays,
+          periodLabel: _periodDescription(dateRange),
+          extendedAnalyticsEnabled: extendedAnalyticsEnabled,
         ),
       ],
     );
@@ -638,10 +652,16 @@ class _PackageDistrictStatistics
   const _PackageDistrictStatistics({
     required this.startDate,
     required this.endDate,
+    required this.workDays,
+    required this.periodLabel,
+    required this.extendedAnalyticsEnabled,
   });
 
   final DateTime startDate;
   final DateTime endDate;
+  final List<WorkDay> workDays;
+  final String periodLabel;
+  final bool extendedAnalyticsEnabled;
 
   @override
   Widget build(
@@ -726,12 +746,12 @@ class _PackageDistrictStatistics
                 Expanded(
                   child: _StatisticCard(
                     icon:
-                        Icons.group_outlined,
-                    title: 'Unterstützung',
+                        Icons.route_outlined,
+                    title: 'Eigene Touren',
                     value:
-                        '${data.supportPackages}',
+                        '${data.totalTours}',
                     subtitle:
-                        'übernommen',
+                        'selbst gefahren',
                   ),
                 ),
               ],
@@ -745,9 +765,9 @@ class _PackageDistrictStatistics
                   child: _StatisticCard(
                     icon:
                         Icons.done_all_outlined,
-                    title: 'Gesamt',
+                    title: 'Eigene Pakete gesamt',
                     value:
-                        '${data.totalDeliveredPackages}',
+                        '${data.ownPackages}',
                     subtitle: 'zugestellt',
                   ),
                 ),
@@ -786,11 +806,11 @@ class _PackageDistrictStatistics
                   child: _StatisticCard(
                     icon:
                         Icons.route_outlined,
-                    title: 'Touren',
+                    title: 'Eigene Tage',
                     value:
-                        '${data.totalTours}',
+                        '${workDays.length}',
                     subtitle:
-                        'selbst gefahren',
+                        'mit eigener Tour',
                   ),
                 ),
                 const SizedBox(width: 12),
@@ -827,7 +847,9 @@ class _PackageDistrictStatistics
               const SizedBox(height: 6),
 
               Text(
-                'Sortiert nach der Anzahl deiner Fahrten.',
+                extendedAnalyticsEnabled
+                    ? 'Tippe auf einen Bezirk, um die erweiterte Analyse zu öffnen.'
+                    : 'Sortiert nach der Anzahl deiner Fahrten.',
                 style: Theme.of(context)
                     .textTheme
                     .bodyMedium
@@ -846,9 +868,24 @@ class _PackageDistrictStatistics
                           .length;
                   index++) ...[
                 _DistrictStatisticCard(
-                  statistic:
-                      data.districtStatistics[
-                          index],
+                  statistic: data.districtStatistics[index],
+                  showAnalysis: extendedAnalyticsEnabled,
+                  onTap: extendedAnalyticsEnabled
+                      ? () {
+                          final statistic = data.districtStatistics[index];
+                          Navigator.of(context).push(
+                            MaterialPageRoute<void>(
+                              builder: (context) => DistrictAnalysisPage(
+                                zspName: statistic.zspName,
+                                district: statistic.district,
+                                entries: statistic.entries,
+                                workDays: workDays,
+                                periodLabel: periodLabel,
+                              ),
+                            ),
+                          );
+                        }
+                      : null,
                 ),
                 if (index <
                     data.districtStatistics
@@ -874,33 +911,46 @@ class _PackageDistrictStatistics
     final locations = ref.read(zspProvider).value ?? const <ZspLocation>[];
     final zspNames = {for (final item in locations) item.id: item.name};
 
-    final ownTourEntries =
+    final ownDistrictWorkDayIds = workDays
+        .where(
+          (workDay) =>
+              workDay.assignmentType ==
+              WorkAssignmentType.ownDistrict,
+        )
+        .map((workDay) => workDay.id)
+        .toSet();
+
+    final allOwnTourEntries =
         await notifier
             .getOwnTourEntriesForDateRange(
       startDate,
       endDate,
     );
 
-    final ownPackages =
-        await notifier
-            .getTotalOwnTourPackagesForDateRange(
-      startDate,
-      endDate,
-    );
+    final ownTourEntries =
+        allOwnTourEntries
+            .where(
+              (entry) =>
+                  ownDistrictWorkDayIds
+                      .contains(entry.workDayId),
+            )
+            .toList();
 
-    final supportPackages =
-        await notifier
-            .getTotalSupportPackagesForDateRange(
-      startDate,
-      endDate,
+    final ownPackages =
+        ownTourEntries.fold<int>(
+      0,
+      (sum, entry) =>
+          sum + entry.deliveredPackageCount,
     );
 
     final cancelledPackages =
-        await notifier
-            .getTotalCancelledOwnTourPackagesForDateRange(
-      startDate,
-      endDate,
+        ownTourEntries.fold<int>(
+      0,
+      (sum, entry) =>
+          sum + entry.cancelledPackageCount,
     );
+
+    final supportPackages = 0;
 
     final districtStatistics =
         _buildDistrictStatistics(
@@ -954,6 +1004,7 @@ class _PackageDistrictStatistics
         driveCount: entries.length,
         totalPackages: totalPackages,
         cancelledPackages: cancelledPackages,
+        entries: List<OwnTourEntry>.unmodifiable(entries),
       );
     }).toList();
 
@@ -1051,17 +1102,24 @@ class _DistrictStatisticCard
     extends StatelessWidget {
   const _DistrictStatisticCard({
     required this.statistic,
+    required this.showAnalysis,
+    this.onTap,
   });
 
   final _DistrictStatistic statistic;
+  final bool showAnalysis;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
     return Card(
       margin: EdgeInsets.zero,
-      child: Padding(
-        padding: const EdgeInsets.all(18),
-        child: Column(
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: Padding(
+          padding: const EdgeInsets.all(18),
+          child: Column(
           crossAxisAlignment:
               CrossAxisAlignment.start,
           children: [
@@ -1192,7 +1250,29 @@ class _DistrictStatisticCard
                 ],
               ),
             ],
+            if (showAnalysis) ...[
+              const SizedBox(height: 14),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  Text(
+                    'Analyse öffnen',
+                    style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                          color: Theme.of(context).colorScheme.primary,
+                          fontWeight: FontWeight.w600,
+                        ),
+                  ),
+                  const SizedBox(width: 4),
+                  Icon(
+                    Icons.chevron_right,
+                    size: 20,
+                    color: Theme.of(context).colorScheme.primary,
+                  ),
+                ],
+              ),
+            ],
           ],
+        ),
         ),
       ),
     );
@@ -1301,6 +1381,7 @@ class _DistrictStatistic {
     required this.driveCount,
     required this.totalPackages,
     required this.cancelledPackages,
+    required this.entries,
   });
 
   final String zspId;
@@ -1309,6 +1390,7 @@ class _DistrictStatistic {
   final int driveCount;
   final int totalPackages;
   final int cancelledPackages;
+  final List<OwnTourEntry> entries;
 
   int get averagePackages {
     if (driveCount <= 0) {

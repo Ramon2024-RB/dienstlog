@@ -5,6 +5,8 @@ import 'package:uuid/uuid.dart';
 import '../../models/advertising.dart';
 import '../../models/district.dart';
 import '../../models/own_tour_entry.dart';
+import '../../models/monday_delivery_entry.dart';
+import '../../models/package_driver_entry.dart';
 import '../../models/support_entry.dart';
 import '../../models/work_day.dart';
 import '../../models/zsp_location.dart';
@@ -20,12 +22,16 @@ class AddWorkDayPage extends ConsumerStatefulWidget {
     this.existingWorkDay,
     this.initialOwnTourEntries = const [],
     this.initialSupportEntries = const [],
+    this.initialPackageDriverEntries = const [],
+    this.initialMondayDeliveryEntries = const [],
   });
 
   final DateTime? initialDate;
   final WorkDay? existingWorkDay;
   final List<OwnTourEntry> initialOwnTourEntries;
   final List<SupportEntry> initialSupportEntries;
+  final List<PackageDriverEntry> initialPackageDriverEntries;
+  final List<MondayDeliveryEntry> initialMondayDeliveryEntries;
 
   @override
   ConsumerState<AddWorkDayPage> createState() =>
@@ -38,6 +44,7 @@ class _AddWorkDayPageState extends ConsumerState<AddWorkDayPage> {
   WorkDayType _type = WorkDayType.work;
   WorkAssignmentType _assignmentType =
       WorkAssignmentType.ownDistrict;
+  DistrictPart? _dayPostPart;
 
   String? _selectedZspId;
 
@@ -56,6 +63,12 @@ class _AddWorkDayPageState extends ConsumerState<AddWorkDayPage> {
 
   final List<_OwnTourDraft> _ownTourDrafts = [];
   final List<_SupportDraft> _supportDrafts = [];
+  final List<_PackageDriverDistrictDraft> _packageDriverDistrictDrafts = [];
+  final TextEditingController _packageDriverPackageController =
+      TextEditingController();
+  final List<_MondayDeliveryDistrictDraft> _mondayDeliveryDistrictDrafts = [];
+  final TextEditingController _mondayDeliveryPackageController =
+      TextEditingController();
 
   bool _hasAdvertising = false;
   bool _saveCustomAdvertising = false;
@@ -76,6 +89,11 @@ class _AddWorkDayPageState extends ConsumerState<AddWorkDayPage> {
 
       _type = existingWorkDay.type;
       _assignmentType = existingWorkDay.assignmentType;
+      _dayPostPart =
+          existingWorkDay.districtPart == DistrictPart.partA ||
+                  existingWorkDay.districtPart == DistrictPart.partB
+              ? existingWorkDay.districtPart
+              : null;
       _selectedZspId = existingWorkDay.zspId;
 
       _workStart = _minutesToTime(
@@ -105,11 +123,41 @@ class _AddWorkDayPageState extends ConsumerState<AddWorkDayPage> {
       _notesController.text =
           existingWorkDay.notes ?? '';
 
+      _packageDriverPackageController.text =
+          existingWorkDay.packageDriverPackageCount > 0
+              ? '${existingWorkDay.packageDriverPackageCount}'
+              : '';
+
+      _mondayDeliveryPackageController.text =
+          existingWorkDay.mondayDeliveryPackageCount > 0
+              ? '${existingWorkDay.mondayDeliveryPackageCount}'
+              : '';
+
+      for (final entry in widget.initialPackageDriverEntries) {
+        _packageDriverDistrictDrafts.add(
+          _PackageDriverDistrictDraft.fromEntry(entry),
+        );
+      }
+
+      for (final entry in widget.initialMondayDeliveryEntries) {
+        _mondayDeliveryDistrictDrafts.add(
+          _MondayDeliveryDistrictDraft.fromEntry(entry),
+        );
+      }
+
       if (widget.initialOwnTourEntries.isNotEmpty) {
         for (final entry in widget.initialOwnTourEntries) {
           _ownTourDrafts.add(
             _OwnTourDraft.fromEntry(entry),
           );
+        }
+      }
+
+      if (_dayPostPart == null && _ownTourDrafts.isNotEmpty) {
+        final legacyPart = _ownTourDrafts.first.districtPart;
+        if (legacyPart == DistrictPart.partA ||
+            legacyPart == DistrictPart.partB) {
+          _dayPostPart = legacyPart;
         }
       } else if (existingWorkDay.type == WorkDayType.work &&
           existingWorkDay.assignmentType ==
@@ -147,6 +195,8 @@ class _AddWorkDayPageState extends ConsumerState<AddWorkDayPage> {
   void dispose() {
     _advertisingController.dispose();
     _notesController.dispose();
+    _packageDriverPackageController.dispose();
+    _mondayDeliveryPackageController.dispose();
 
     for (final draft in _ownTourDrafts) {
       draft.dispose();
@@ -358,6 +408,12 @@ class _AddWorkDayPageState extends ConsumerState<AddWorkDayPage> {
                   for (final draft in _supportDrafts) {
                     draft.districtNumber = null;
                   }
+                  for (final draft in _packageDriverDistrictDrafts) {
+                    draft.districtNumber = null;
+                  }
+                  for (final draft in _mondayDeliveryDistrictDrafts) {
+                    draft.districtNumber = null;
+                  }
                 });
               },
             ),
@@ -382,6 +438,16 @@ class _AddWorkDayPageState extends ConsumerState<AddWorkDayPage> {
                       ),
                       icon: Icon(
                         Icons.route_outlined,
+                      ),
+                    ),
+                    ButtonSegment(
+                      value:
+                          WorkAssignmentType.mondayDelivery,
+                      label: Text(
+                        'Montagszustellung',
+                      ),
+                      icon: Icon(
+                        Icons.calendar_view_week_outlined,
                       ),
                     ),
                     ButtonSegment(
@@ -421,7 +487,9 @@ class _AddWorkDayPageState extends ConsumerState<AddWorkDayPage> {
                 Text(
                   hasOwnDistrict
                       ? 'Trage alle Bezirke ein, die du an diesem Tag selbst gefahren bist.'
-                      : 'Du bist an diesem Tag zusätzliche Unterstützung und übernimmst Pakete von regulär besetzten Bezirken.',
+                      : _assignmentType == WorkAssignmentType.mondayDelivery
+                          ? 'Trage alle Bezirke der Montagszustellung ein. Es gibt dabei keine A-/B-Sortierung und die Paketmenge wird nur einmal insgesamt erfasst.'
+                          : 'Trage alle Bezirke ein, aus denen du als Paketfahrer Pakete gefahren hast. Die Paketmenge gibst du nur einmal als Gesamtmenge ein.',
                   style: Theme.of(context)
                       .textTheme
                       .bodyMedium
@@ -571,19 +639,34 @@ class _AddWorkDayPageState extends ConsumerState<AddWorkDayPage> {
 
           if (hasOwnDistrict) ...[
             const SizedBox(height: 16),
-
             _buildOwnTourSection(
               context,
               districts,
             ),
+            const SizedBox(height: 16),
+            _buildSupportSection(
+              context,
+              districts,
+            ),
+          ] else if (_assignmentType ==
+              WorkAssignmentType.mondayDelivery) ...[
+            const SizedBox(height: 16),
+            _buildMondayDeliverySection(
+              context,
+              districts,
+            ),
+            const SizedBox(height: 16),
+            _buildSupportSection(
+              context,
+              districts,
+            ),
+          ] else ...[
+            const SizedBox(height: 16),
+            _buildPackageDriverSection(
+              context,
+              districts,
+            ),
           ],
-
-          const SizedBox(height: 16),
-
-          _buildSupportSection(
-            context,
-            districts,
-          ),
 
           const SizedBox(height: 16),
 
@@ -812,6 +895,32 @@ class _AddWorkDayPageState extends ConsumerState<AddWorkDayPage> {
                 ),
           ),
 
+          const SizedBox(height: 16),
+
+          DropdownButtonFormField<DistrictPart>(
+            initialValue: _dayPostPart,
+            decoration: const InputDecoration(
+              labelText: 'Post',
+              helperText: 'Gilt einmal für den gesamten Arbeitstag.',
+              border: OutlineInputBorder(),
+            ),
+            items: const [
+              DropdownMenuItem<DistrictPart>(
+                value: DistrictPart.partA,
+                child: Text('A-Teil'),
+              ),
+              DropdownMenuItem<DistrictPart>(
+                value: DistrictPart.partB,
+                child: Text('B-Teil'),
+              ),
+            ],
+            onChanged: (value) {
+              setState(() {
+                _dayPostPart = value;
+              });
+            },
+          ),
+
           if (_ownTourDrafts.isNotEmpty) ...[
             const SizedBox(height: 16),
 
@@ -951,6 +1060,198 @@ class _AddWorkDayPageState extends ConsumerState<AddWorkDayPage> {
     });
   }
 
+  Widget _buildMondayDeliverySection(
+    BuildContext context,
+    List<District> districts,
+  ) {
+    return _SectionCard(
+      title: 'Montagszustellung',
+      icon: Icons.calendar_view_week_outlined,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Wähle alle Bezirke aus, die du in der Montagszustellung gefahren bist. Es gibt keine A-/B-Sortierung. Die Paketmenge wird nur einmal insgesamt gespeichert und nicht auf die Bezirke verteilt.',
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
+          ),
+          if (_mondayDeliveryDistrictDrafts.isNotEmpty) ...[
+            const SizedBox(height: 16),
+            for (var index = 0;
+                index < _mondayDeliveryDistrictDrafts.length;
+                index++) ...[
+              Row(
+                children: [
+                  Expanded(
+                    child: DropdownButtonFormField<int>(
+                      key: ValueKey(_mondayDeliveryDistrictDrafts[index].key),
+                      initialValue:
+                          _mondayDeliveryDistrictDrafts[index].districtNumber,
+                      decoration: InputDecoration(
+                        labelText: 'Bezirk ${index + 1}',
+                        border: const OutlineInputBorder(),
+                      ),
+                      items: districts
+                          .map(
+                            (district) => DropdownMenuItem<int>(
+                              value: district.number,
+                              child: Text('Bezirk ${district.number}'),
+                            ),
+                          )
+                          .toList(),
+                      onChanged: (value) {
+                        setState(() {
+                          _mondayDeliveryDistrictDrafts[index].districtNumber =
+                              value;
+                        });
+                      },
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  IconButton(
+                    tooltip: 'Bezirk entfernen',
+                    onPressed: () {
+                      setState(() {
+                        _mondayDeliveryDistrictDrafts.removeAt(index);
+                      });
+                    },
+                    icon: const Icon(Icons.delete_outline),
+                  ),
+                ],
+              ),
+              if (index != _mondayDeliveryDistrictDrafts.length - 1)
+                const SizedBox(height: 12),
+            ],
+          ],
+          const SizedBox(height: 14),
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              onPressed: () {
+                setState(() {
+                  _mondayDeliveryDistrictDrafts.add(
+                    _MondayDeliveryDistrictDraft(),
+                  );
+                });
+              },
+              icon: const Icon(Icons.add),
+              label: const Text('Bezirk hinzufügen'),
+            ),
+          ),
+          const SizedBox(height: 16),
+          TextField(
+            controller: _mondayDeliveryPackageController,
+            keyboardType: TextInputType.number,
+            decoration: const InputDecoration(
+              labelText: 'Pakete gesamt',
+              hintText: 'z. B. 80',
+              helperText:
+                  'Einmalige Gesamtmenge für alle Bezirke der Montagszustellung.',
+              border: OutlineInputBorder(),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPackageDriverSection(
+    BuildContext context,
+    List<District> districts,
+  ) {
+    return _SectionCard(
+      title: 'Paketfahrer',
+      icon: Icons.local_shipping_outlined,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Wähle alle Bezirke aus, aus denen du Pakete gefahren hast. Die Gesamtmenge wird nicht auf die einzelnen Bezirke verteilt.',
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
+          ),
+          if (_packageDriverDistrictDrafts.isNotEmpty) ...[
+            const SizedBox(height: 16),
+            for (var index = 0;
+                index < _packageDriverDistrictDrafts.length;
+                index++) ...[
+              Row(
+                children: [
+                  Expanded(
+                    child: DropdownButtonFormField<int>(
+                      key: ValueKey(_packageDriverDistrictDrafts[index].key),
+                      initialValue:
+                          _packageDriverDistrictDrafts[index].districtNumber,
+                      decoration: InputDecoration(
+                        labelText: 'Bezirk ${index + 1}',
+                        border: const OutlineInputBorder(),
+                      ),
+                      items: districts
+                          .map(
+                            (district) => DropdownMenuItem<int>(
+                              value: district.number,
+                              child: Text('Bezirk ${district.number}'),
+                            ),
+                          )
+                          .toList(),
+                      onChanged: (value) {
+                        setState(() {
+                          _packageDriverDistrictDrafts[index].districtNumber =
+                              value;
+                        });
+                      },
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  IconButton(
+                    tooltip: 'Bezirk entfernen',
+                    onPressed: () {
+                      setState(() {
+                        _packageDriverDistrictDrafts.removeAt(index);
+                      });
+                    },
+                    icon: const Icon(Icons.delete_outline),
+                  ),
+                ],
+              ),
+              if (index != _packageDriverDistrictDrafts.length - 1)
+                const SizedBox(height: 12),
+            ],
+          ],
+          const SizedBox(height: 14),
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              onPressed: () {
+                setState(() {
+                  _packageDriverDistrictDrafts.add(
+                    _PackageDriverDistrictDraft(),
+                  );
+                });
+              },
+              icon: const Icon(Icons.add),
+              label: const Text('Bezirk hinzufügen'),
+            ),
+          ),
+          const SizedBox(height: 16),
+          TextField(
+            controller: _packageDriverPackageController,
+            keyboardType: TextInputType.number,
+            decoration: const InputDecoration(
+              labelText: 'Pakete gesamt',
+              hintText: 'z. B. 180',
+              helperText:
+                  'Einmalige Gesamtmenge für alle oben eingetragenen Bezirke.',
+              border: OutlineInputBorder(),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildSupportSection(
     BuildContext context,
     List<District> districts,
@@ -963,10 +1264,8 @@ class _AddWorkDayPageState extends ConsumerState<AddWorkDayPage> {
             CrossAxisAlignment.start,
         children: [
           Text(
-            _assignmentType ==
-                    WorkAssignmentType
-                        .packageDriver
-                ? 'Trage hier die Bezirke ein, von denen du Pakete übernommen hast.'
+            _assignmentType == WorkAssignmentType.mondayDelivery
+                ? 'Wenn du nach der Montagszustellung noch Kollegen unterstützt hast, kannst du diese hier separat eintragen.'
                 : 'Wenn du nach deiner eigenen Zustellung noch Kollegen unterstützt hast, kannst du diese hier eintragen.',
             style: Theme.of(context)
                 .textTheme
@@ -1080,6 +1379,10 @@ class _AddWorkDayPageState extends ConsumerState<AddWorkDayPage> {
         _assignmentType ==
             WorkAssignmentType.ownDistrict;
 
+    final isMondayDelivery =
+        _assignmentType ==
+            WorkAssignmentType.mondayDelivery;
+
     if (isWorkDay) {
       final workStartMinutes =
           _timeToMinutes(_workStart);
@@ -1125,6 +1428,16 @@ class _AddWorkDayPageState extends ConsumerState<AddWorkDayPage> {
         );
         return;
       }
+    }
+
+    if (isWorkDay &&
+        hasOwnDistrict &&
+        _dayPostPart != DistrictPart.partA &&
+        _dayPostPart != DistrictPart.partB) {
+      _showMessage(
+        'Bitte wähle für den Arbeitstag Post A-Teil oder B-Teil aus.',
+      );
+      return;
     }
 
     if (isWorkDay &&
@@ -1182,7 +1495,7 @@ class _AddWorkDayPageState extends ConsumerState<AddWorkDayPage> {
       }
     }
 
-    if (isWorkDay) {
+    if (isWorkDay && (hasOwnDistrict || isMondayDelivery)) {
       for (var index = 0;
           index <
               _supportDrafts.length;
@@ -1211,12 +1524,56 @@ class _AddWorkDayPageState extends ConsumerState<AddWorkDayPage> {
         }
       }
 
-      if (_assignmentType ==
-              WorkAssignmentType
-                  .packageDriver &&
-          _supportDrafts.isEmpty) {
+    }
+
+    if (isWorkDay && isMondayDelivery) {
+      if (_mondayDeliveryDistrictDrafts.isEmpty) {
         _showMessage(
-          'Bitte füge mindestens eine Unterstützung hinzu.',
+          'Bitte füge mindestens einen Bezirk für die Montagszustellung hinzu.',
+        );
+        return;
+      }
+
+      for (var index = 0;
+          index < _mondayDeliveryDistrictDrafts.length;
+          index++) {
+        if (_mondayDeliveryDistrictDrafts[index].districtNumber == null) {
+          _showMessage(
+            'Bitte wähle bei Montagszustellung-Bezirk ${index + 1} einen Bezirk aus.',
+          );
+          return;
+        }
+      }
+
+      if (_parseCount(_mondayDeliveryPackageController) <= 0) {
+        _showMessage(
+          'Bitte trage die gesamte Paketmenge für die Montagszustellung ein.',
+        );
+        return;
+      }
+    }
+
+    if (isWorkDay &&
+        _assignmentType == WorkAssignmentType.packageDriver) {
+      if (_packageDriverDistrictDrafts.isEmpty) {
+        _showMessage('Bitte füge mindestens einen Paketfahrer-Bezirk hinzu.');
+        return;
+      }
+
+      for (var index = 0;
+          index < _packageDriverDistrictDrafts.length;
+          index++) {
+        if (_packageDriverDistrictDrafts[index].districtNumber == null) {
+          _showMessage(
+            'Bitte wähle bei Paketfahrer-Bezirk ${index + 1} einen Bezirk aus.',
+          );
+          return;
+        }
+      }
+
+      if (_parseCount(_packageDriverPackageController) <= 0) {
+        _showMessage(
+          'Bitte trage die gesamte Paketmenge für den Paketfahrer-Tag ein.',
         );
         return;
       }
@@ -1238,8 +1595,8 @@ class _AddWorkDayPageState extends ConsumerState<AddWorkDayPage> {
                         .districtNumber
                         .toString(),
                     zspId: effectiveZspId,
-                    districtPart: draft
-                        .districtPart,
+                    districtPart:
+                        _dayPostPart ?? DistrictPart.full,
                     packageCount:
                         _parseCount(
                       draft
@@ -1256,7 +1613,7 @@ class _AddWorkDayPageState extends ConsumerState<AddWorkDayPage> {
             : <OwnTourEntry>[];
 
     final supportEntries =
-        isWorkDay
+        isWorkDay && (hasOwnDistrict || isMondayDelivery)
             ? _supportDrafts
                 .map(
                   (draft) =>
@@ -1281,6 +1638,33 @@ class _AddWorkDayPageState extends ConsumerState<AddWorkDayPage> {
                 )
                 .toList()
             : <SupportEntry>[];
+
+    final packageDriverEntries =
+        isWorkDay &&
+                _assignmentType == WorkAssignmentType.packageDriver
+            ? _packageDriverDistrictDrafts
+                .map(
+                  (draft) => PackageDriverEntry(
+                    workDayId: id,
+                    district: draft.districtNumber.toString(),
+                    zspId: effectiveZspId,
+                  ),
+                )
+                .toList()
+            : <PackageDriverEntry>[];
+
+    final mondayDeliveryEntries =
+        isWorkDay && isMondayDelivery
+            ? _mondayDeliveryDistrictDrafts
+                .map(
+                  (draft) => MondayDeliveryEntry(
+                    workDayId: id,
+                    district: draft.districtNumber.toString(),
+                    zspId: effectiveZspId,
+                  ),
+                )
+                .toList()
+            : <MondayDeliveryEntry>[];
 
     final firstOwnTour =
         ownTourEntries.isEmpty
@@ -1312,8 +1696,9 @@ class _AddWorkDayPageState extends ConsumerState<AddWorkDayPage> {
       districtId:
           firstOwnTour?.district,
       districtPart:
-          firstOwnTour?.districtPart ??
-              DistrictPart.full,
+          isWorkDay && hasOwnDistrict
+              ? (_dayPostPart ?? DistrictPart.full)
+              : DistrictPart.full,
       workStart:
           isWorkDay
               ? _timeToMinutes(
@@ -1351,6 +1736,15 @@ class _AddWorkDayPageState extends ConsumerState<AddWorkDayPage> {
           isWorkDay &&
                   hasOwnDistrict
               ? totalOwnCancelledPackageCount
+              : 0,
+      packageDriverPackageCount:
+          isWorkDay &&
+                  _assignmentType == WorkAssignmentType.packageDriver
+              ? _parseCount(_packageDriverPackageController)
+              : 0,
+      mondayDeliveryPackageCount:
+          isWorkDay && isMondayDelivery
+              ? _parseCount(_mondayDeliveryPackageController)
               : 0,
       hasAdvertising:
           isWorkDay &&
@@ -1419,6 +1813,10 @@ class _AddWorkDayPageState extends ConsumerState<AddWorkDayPage> {
               ownTourEntries,
           supportEntries:
               supportEntries,
+          packageDriverEntries:
+              packageDriverEntries,
+          mondayDeliveryEntries:
+              mondayDeliveryEntries,
         );
       } else {
         await notifier.updateWorkDay(
@@ -1427,6 +1825,10 @@ class _AddWorkDayPageState extends ConsumerState<AddWorkDayPage> {
               ownTourEntries,
           supportEntries:
               supportEntries,
+          packageDriverEntries:
+              packageDriverEntries,
+          mondayDeliveryEntries:
+              mondayDeliveryEntries,
         );
       }
 
@@ -1775,7 +2177,7 @@ class _OwnTourCompactCard
                       height: 3,
                     ),
                     Text(
-                      _districtPartLabel(
+                      _postPartLabel(
                         draft
                             .districtPart,
                       ),
@@ -1829,18 +2231,18 @@ class _OwnTourCompactCard
     );
   }
 
-  static String _districtPartLabel(
+  static String _postPartLabel(
     DistrictPart part,
   ) {
     switch (part) {
       case DistrictPart.full:
-        return 'Ganzer Bezirk';
+        return 'Post: nicht angegeben';
 
       case DistrictPart.partA:
-        return 'A-Teil';
+        return 'Post: A-Teil';
 
       case DistrictPart.partB:
-        return 'B-Teil';
+        return 'Post: B-Teil';
     }
   }
 }
@@ -1939,50 +2341,6 @@ class _OwnTourFormSheetState
                   setState(() {
                     widget.draft
                             .districtNumber =
-                        value;
-                  });
-                },
-              ),
-
-              const SizedBox(
-                height: 14,
-              ),
-
-              DropdownButtonFormField<
-                  DistrictPart>(
-                initialValue:
-                    widget.draft
-                        .districtPart,
-                decoration:
-                    const InputDecoration(
-                  labelText:
-                      'Bezirksteil',
-                  border:
-                      OutlineInputBorder(),
-                ),
-                items: DistrictPart
-                    .values
-                    .map(
-                      (part) =>
-                          DropdownMenuItem<
-                              DistrictPart>(
-                        value: part,
-                        child: Text(
-                          _districtPartLabel(
-                            part,
-                          ),
-                        ),
-                      ),
-                    )
-                    .toList(),
-                onChanged: (value) {
-                  if (value == null) {
-                    return;
-                  }
-
-                  setState(() {
-                    widget.draft
-                            .districtPart =
                         value;
                   });
                 },
@@ -2103,20 +2461,6 @@ class _OwnTourFormSheetState
     );
   }
 
-  static String _districtPartLabel(
-    DistrictPart part,
-  ) {
-    switch (part) {
-      case DistrictPart.full:
-        return 'Ganzer Bezirk';
-
-      case DistrictPart.partA:
-        return 'A-Teil';
-
-      case DistrictPart.partB:
-        return 'B-Teil';
-    }
-  }
 }
 
 class _SupportEditor
@@ -2374,6 +2718,30 @@ class _OwnTourDraft {
     cancelledPackageController
         .dispose();
   }
+}
+
+class _PackageDriverDistrictDraft {
+  _PackageDriverDistrictDraft() : key = UniqueKey();
+
+  _PackageDriverDistrictDraft.fromEntry(
+    PackageDriverEntry entry,
+  )   : key = UniqueKey(),
+        districtNumber = int.tryParse(entry.district);
+
+  final Key key;
+  int? districtNumber;
+}
+
+class _MondayDeliveryDistrictDraft {
+  _MondayDeliveryDistrictDraft() : key = UniqueKey();
+
+  _MondayDeliveryDistrictDraft.fromEntry(
+    MondayDeliveryEntry entry,
+  )   : key = UniqueKey(),
+        districtNumber = int.tryParse(entry.district);
+
+  final Key key;
+  int? districtNumber;
 }
 
 class _SupportDraft {

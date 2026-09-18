@@ -1,23 +1,10 @@
 import 'zsp_location.dart';
 
-enum WorkDayType {
-  work,
-  free,
-  vacation,
-  holiday,
-  sick,
-}
+enum WorkDayType { work, free, vacation, holiday, sick }
 
-enum WorkAssignmentType {
-  ownDistrict,
-  packageDriver,
-}
+enum WorkAssignmentType { ownDistrict, mondayDelivery, packageDriver }
 
-enum DistrictPart {
-  full,
-  partA,
-  partB,
-}
+enum DistrictPart { full, partA, partB }
 
 class WorkDay {
   const WorkDay({
@@ -35,6 +22,8 @@ class WorkDay {
     this.breakMinutes = 0,
     this.packageCount = 0,
     this.cancelledPackageCount = 0,
+    this.packageDriverPackageCount = 0,
+    this.mondayDeliveryPackageCount = 0,
     this.hasAdvertising = false,
     this.advertising,
     this.notes,
@@ -54,31 +43,35 @@ class WorkDay {
   final int breakMinutes;
   final int packageCount;
   final int cancelledPackageCount;
+  final int packageDriverPackageCount;
+  final int mondayDeliveryPackageCount;
   final bool hasAdvertising;
   final String? advertising;
   final String? notes;
 
   bool get isWorkDay => type == WorkDayType.work;
-  bool get isPackageDriver => assignmentType == WorkAssignmentType.packageDriver;
+
+  bool get isPackageDriver =>
+      assignmentType == WorkAssignmentType.packageDriver;
+
+  bool get isMondayDelivery =>
+      assignmentType == WorkAssignmentType.mondayDelivery;
 
   int? get workDurationMinutes {
     if (workStart == null || workEnd == null) return null;
     final duration = workEnd! - workStart! - breakMinutes;
-    if (duration < 0) return null;
-    return duration;
+    return duration < 0 ? null : duration;
   }
 
   int? get deliveryDurationMinutes {
     if (departureTime == null || deliveryEnd == null) return null;
     final duration = deliveryEnd! - departureTime!;
-    if (duration < 0) return null;
-    return duration;
+    return duration < 0 ? null : duration;
   }
 
   int get deliveredPackageCount {
     final delivered = packageCount - cancelledPackageCount;
-    if (delivered < 0) return 0;
-    return delivered;
+    return delivered < 0 ? 0 : delivered;
   }
 
   WorkDay copyWith({
@@ -101,6 +94,8 @@ class WorkDay {
     int? breakMinutes,
     int? packageCount,
     int? cancelledPackageCount,
+    int? packageDriverPackageCount,
+    int? mondayDeliveryPackageCount,
     bool? hasAdvertising,
     String? advertising,
     bool clearAdvertising = false,
@@ -116,12 +111,18 @@ class WorkDay {
       districtId: clearDistrictId ? null : districtId ?? this.districtId,
       districtPart: districtPart ?? this.districtPart,
       workStart: clearWorkStart ? null : workStart ?? this.workStart,
-      departureTime: clearDepartureTime ? null : departureTime ?? this.departureTime,
+      departureTime:
+          clearDepartureTime ? null : departureTime ?? this.departureTime,
       deliveryEnd: clearDeliveryEnd ? null : deliveryEnd ?? this.deliveryEnd,
       workEnd: clearWorkEnd ? null : workEnd ?? this.workEnd,
       breakMinutes: breakMinutes ?? this.breakMinutes,
       packageCount: packageCount ?? this.packageCount,
-      cancelledPackageCount: cancelledPackageCount ?? this.cancelledPackageCount,
+      cancelledPackageCount:
+          cancelledPackageCount ?? this.cancelledPackageCount,
+      packageDriverPackageCount:
+          packageDriverPackageCount ?? this.packageDriverPackageCount,
+      mondayDeliveryPackageCount:
+          mondayDeliveryPackageCount ?? this.mondayDeliveryPackageCount,
       hasAdvertising: hasAdvertising ?? this.hasAdvertising,
       advertising: clearAdvertising ? null : advertising ?? this.advertising,
       notes: clearNotes ? null : notes ?? this.notes,
@@ -144,6 +145,8 @@ class WorkDay {
       'break_minutes': breakMinutes,
       'package_count': packageCount,
       'cancelled_package_count': cancelledPackageCount,
+      'package_driver_package_count': packageDriverPackageCount,
+      'monday_delivery_package_count': mondayDeliveryPackageCount,
       'has_advertising': hasAdvertising ? 1 : 0,
       'advertising': advertising,
       'notes': notes,
@@ -174,7 +177,12 @@ class WorkDay {
       workEnd: map['work_end'] as int?,
       breakMinutes: (map['break_minutes'] as int?) ?? 0,
       packageCount: (map['package_count'] as int?) ?? 0,
-      cancelledPackageCount: (map['cancelled_package_count'] as int?) ?? 0,
+      cancelledPackageCount:
+          (map['cancelled_package_count'] as int?) ?? 0,
+      packageDriverPackageCount:
+          (map['package_driver_package_count'] as int?) ?? 0,
+      mondayDeliveryPackageCount:
+          (map['monday_delivery_package_count'] as int?) ?? 0,
       hasAdvertising: (map['has_advertising'] as int? ?? 0) == 1,
       advertising: map['advertising'] as String?,
       notes: map['notes'] as String?,
@@ -182,7 +190,6 @@ class WorkDay {
   }
 
   static String _dateToDatabase(DateTime date) {
-    final normalizedDate = DateTime(date.year, date.month, date.day);
-    return normalizedDate.toIso8601String();
+    return DateTime(date.year, date.month, date.day).toIso8601String();
   }
 }

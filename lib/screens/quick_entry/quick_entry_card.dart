@@ -122,158 +122,155 @@ class _QuickEntryCardState
   @override
   Widget build(BuildContext context) {
     final currentWorkDay = workDay;
+    final nextAction = _nextAction(currentWorkDay);
+    final theme = Theme.of(context);
 
     return Card(
       child: Padding(
-        padding: const EdgeInsets.all(20),
+        padding: const EdgeInsets.all(18),
         child: Column(
-          crossAxisAlignment:
-              CrossAxisAlignment.start,
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
               children: [
                 Icon(
-                  Icons.bolt_outlined,
-                  color: Theme.of(context)
-                      .colorScheme
-                      .primary,
+                  nextAction.icon,
+                  color: theme.colorScheme.primary,
                 ),
                 const SizedBox(width: 10),
-                Text(
-                  'Schnellerfassung',
-                  style: Theme.of(context)
-                      .textTheme
-                      .titleLarge
-                      ?.copyWith(
-                        fontWeight:
-                            FontWeight.bold,
-                      ),
+                Expanded(
+                  child: Text(
+                    nextAction.heading,
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
                 ),
               ],
             ),
-            const SizedBox(height: 6),
-            Text(
-              'Zeiten mit einem Tipp erfassen. Vor dem Speichern wird immer nachgefragt.',
-              style: Theme.of(context)
-                  .textTheme
-                  .bodyMedium
-                  ?.copyWith(
-                    color: Theme.of(context)
-                        .colorScheme
-                        .onSurfaceVariant,
-                  ),
-            ),
             const SizedBox(height: 14),
-            _QuickProgressBanner(
-              workDay: currentWorkDay,
-            ),
-            const SizedBox(height: 20),
-
-            _QuickActionTile(
-              icon: Icons.login,
-              title: 'Dienstbeginn',
-              value: _formatTime(
-                currentWorkDay?.workStart,
-              ),
-              isDone:
-                  currentWorkDay?.workStart != null,
-              onTap: () => _saveSimpleTime(
-                context: context,
-                ref: ref,
-                action: _QuickTimeAction.workStart,
-              ),
-            ),
-
-            const SizedBox(height: 10),
-
-            _QuickActionTile(
-              icon: Icons.local_shipping_outlined,
-              title: 'Zustellungsbeginn',
-              value: _formatTime(
-                currentWorkDay?.departureTime,
-              ),
-              isDone:
-                  currentWorkDay?.departureTime !=
-                      null,
-              onTap: () => _startDelivery(
-                context,
-                ref,
-              ),
-            ),
-
-            const SizedBox(height: 10),
-
-            _QuickActionTile(
-              icon: Icons.inventory_2_outlined,
-              title: 'Zustellungsende',
-              value: _formatTime(
-                currentWorkDay?.deliveryEnd,
-              ),
-              isDone:
-                  currentWorkDay?.deliveryEnd != null,
-              onTap: () => _endDelivery(
-                context,
-                ref,
-              ),
-            ),
-
-            const SizedBox(height: 10),
-
-            _QuickActionTile(
-              icon: Icons.logout,
-              title: 'Dienstende',
-              value: _formatTime(
-                currentWorkDay?.workEnd,
-              ),
-              isDone:
-                  currentWorkDay?.workEnd != null,
-              onTap: () => _saveSimpleTime(
-                context: context,
-                ref: ref,
-                action: _QuickTimeAction.workEnd,
-              ),
-            ),
-
-            const SizedBox(height: 20),
-            const Divider(),
-            const SizedBox(height: 10),
-            Text(
-              'Unterstützung',
-              style: Theme.of(context)
-                  .textTheme
-                  .titleMedium
-                  ?.copyWith(
-                    fontWeight: FontWeight.bold,
-                  ),
-            ),
-            const SizedBox(height: 6),
-            Text(
-              'Zusätzliche Hilfe in einem anderen Bezirk direkt erfassen.',
-              style: Theme.of(context)
-                  .textTheme
-                  .bodyMedium
-                  ?.copyWith(
-                    color: Theme.of(context)
-                        .colorScheme
-                        .onSurfaceVariant,
-                  ),
-            ),
-            const SizedBox(height: 12),
             SizedBox(
               width: double.infinity,
-              child: OutlinedButton.icon(
-                onPressed: () => _addSupport(
-                  context,
-                  ref,
+              child: FilledButton.icon(
+                onPressed: nextAction.enabled
+                    ? () => _runNextAction(
+                          context,
+                          ref,
+                          nextAction.action,
+                        )
+                    : null,
+                icon: Icon(nextAction.buttonIcon),
+                label: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 4),
+                  child: Text(nextAction.buttonLabel),
                 ),
-                icon: const Icon(Icons.add),
-                label: const Text('Unterstützung hinzufügen'),
               ),
             ),
+            if (currentWorkDay != null &&
+                currentWorkDay.workEnd == null) ...[
+              const SizedBox(height: 10),
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed: () => _addSupport(context, ref),
+                  icon: const Icon(Icons.add),
+                  label: const Text('Unterstützung hinzufügen'),
+                ),
+              ),
+            ],
+            if (currentWorkDay?.workEnd != null) ...[
+              const SizedBox(height: 8),
+              Text(
+                'Der Arbeitstag ist vollständig erfasst.',
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ],
           ],
         ),
       ),
     );
+  }
+
+  _NextQuickAction _nextAction(WorkDay? current) {
+    if (current == null || current.workStart == null) {
+      return const _NextQuickAction(
+        heading: 'Bereit für den Arbeitstag',
+        buttonLabel: 'Dienst beginnen',
+        icon: Icons.play_circle_outline,
+        buttonIcon: Icons.login,
+        action: QuickEntryExternalAction.workStart,
+      );
+    }
+
+    if (current.departureTime == null) {
+      return const _NextQuickAction(
+        heading: 'Nächster Schritt',
+        buttonLabel: 'Zustellung beginnen',
+        icon: Icons.route_outlined,
+        buttonIcon: Icons.local_shipping_outlined,
+        action: QuickEntryExternalAction.deliveryStart,
+      );
+    }
+
+    if (current.deliveryEnd == null) {
+      return const _NextQuickAction(
+        heading: 'Zustellung läuft',
+        buttonLabel: 'Zustellung beenden',
+        icon: Icons.local_shipping_outlined,
+        buttonIcon: Icons.inventory_2_outlined,
+        action: QuickEntryExternalAction.deliveryEnd,
+      );
+    }
+
+    if (current.workEnd == null) {
+      return const _NextQuickAction(
+        heading: 'Zustellung abgeschlossen',
+        buttonLabel: 'Dienst beenden',
+        icon: Icons.schedule_outlined,
+        buttonIcon: Icons.logout,
+        action: QuickEntryExternalAction.workEnd,
+      );
+    }
+
+    return const _NextQuickAction(
+      heading: 'Arbeitstag abgeschlossen',
+      buttonLabel: 'Arbeitstag vollständig erfasst',
+      icon: Icons.check_circle_outline,
+      buttonIcon: Icons.check,
+      action: QuickEntryExternalAction.workEnd,
+      enabled: false,
+    );
+  }
+
+  Future<void> _runNextAction(
+    BuildContext context,
+    WidgetRef ref,
+    QuickEntryExternalAction action,
+  ) async {
+    switch (action) {
+      case QuickEntryExternalAction.workStart:
+        await _saveSimpleTime(
+          context: context,
+          ref: ref,
+          action: _QuickTimeAction.workStart,
+        );
+        break;
+      case QuickEntryExternalAction.deliveryStart:
+        await _startDelivery(context, ref);
+        break;
+      case QuickEntryExternalAction.deliveryEnd:
+        await _endDelivery(context, ref);
+        break;
+      case QuickEntryExternalAction.workEnd:
+        await _saveSimpleTime(
+          context: context,
+          ref: ref,
+          action: _QuickTimeAction.workEnd,
+        );
+        break;
+    }
   }
 
   Future<void> _saveSimpleTime({
@@ -1053,179 +1050,27 @@ class _QuickEntryCardState
   }
 }
 
+class _NextQuickAction {
+  const _NextQuickAction({
+    required this.heading,
+    required this.buttonLabel,
+    required this.icon,
+    required this.buttonIcon,
+    required this.action,
+    this.enabled = true,
+  });
+
+  final String heading;
+  final String buttonLabel;
+  final IconData icon;
+  final IconData buttonIcon;
+  final QuickEntryExternalAction action;
+  final bool enabled;
+}
+
 enum _QuickTimeAction {
   workStart,
   workEnd,
-}
-
-class _QuickProgressBanner extends StatelessWidget {
-  const _QuickProgressBanner({
-    required this.workDay,
-  });
-
-  final WorkDay? workDay;
-
-  @override
-  Widget build(BuildContext context) {
-    final (icon, text) = _status();
-
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(
-        horizontal: 14,
-        vertical: 12,
-      ),
-      decoration: BoxDecoration(
-        color: Theme.of(context)
-            .colorScheme
-            .primaryContainer
-            .withValues(alpha: 0.45),
-        borderRadius: BorderRadius.circular(16),
-      ),
-      child: Row(
-        children: [
-          Icon(
-            icon,
-            size: 20,
-            color: Theme.of(context).colorScheme.primary,
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Text(
-              text,
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    fontWeight: FontWeight.w600,
-                  ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  (IconData, String) _status() {
-    final current = workDay;
-
-    if (current == null || current.workStart == null) {
-      return (
-        Icons.play_circle_outline,
-        'Nächster Schritt: Dienstbeginn erfassen',
-      );
-    }
-
-    if (current.departureTime == null) {
-      return (
-        Icons.route_outlined,
-        'Nächster Schritt: Zustellung starten',
-      );
-    }
-
-    if (current.deliveryEnd == null) {
-      return (
-        Icons.local_shipping_outlined,
-        'Zustellung läuft',
-      );
-    }
-
-    if (current.workEnd == null) {
-      return (
-        Icons.schedule_outlined,
-        'Nächster Schritt: Dienstende erfassen',
-      );
-    }
-
-    return (
-      Icons.check_circle_outline,
-      'Arbeitstag vollständig erfasst',
-    );
-  }
-}
-
-class _QuickActionTile extends StatelessWidget {
-  const _QuickActionTile({
-    required this.icon,
-    required this.title,
-    required this.value,
-    required this.isDone,
-    required this.onTap,
-  });
-
-  final IconData icon;
-  final String title;
-  final String value;
-  final bool isDone;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final colorScheme =
-        Theme.of(context).colorScheme;
-
-    return Material(
-      color: isDone
-          ? colorScheme.primaryContainer
-              .withValues(alpha: 0.45)
-          : colorScheme.surfaceContainerHighest
-              .withValues(alpha: 0.45),
-      borderRadius: BorderRadius.circular(16),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(16),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(
-            horizontal: 16,
-            vertical: 14,
-          ),
-          child: Row(
-            children: [
-              Icon(
-                isDone
-                    ? Icons.check_circle
-                    : icon,
-                color: isDone
-                    ? colorScheme.primary
-                    : colorScheme
-                        .onSurfaceVariant,
-              ),
-              const SizedBox(width: 14),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment:
-                      CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      title,
-                      style: Theme.of(context)
-                          .textTheme
-                          .titleMedium
-                          ?.copyWith(
-                            fontWeight:
-                                FontWeight.w600,
-                          ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      value,
-                      style: Theme.of(context)
-                          .textTheme
-                          .bodyMedium
-                          ?.copyWith(
-                            color: colorScheme
-                                .onSurfaceVariant,
-                          ),
-                    ),
-                  ],
-                ),
-              ),
-              const Icon(
-                Icons.chevron_right,
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
 }
 
 class _DeliveryStartSheet extends StatefulWidget {

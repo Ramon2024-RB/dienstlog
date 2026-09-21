@@ -174,6 +174,13 @@ class _StatisticsPageState
           WorkAssignmentType.packageDriver,
     ).length;
 
+    final mondayDeliveryDays =
+        filteredWorkDays.where(
+      (workDay) =>
+          workDay.assignmentType ==
+          WorkAssignmentType.mondayDelivery,
+    ).length;
+
     final ownDistrictWorkDays =
         filteredWorkDays.where(
       (workDay) =>
@@ -270,13 +277,21 @@ class _StatisticsPageState
             const SizedBox(width: 12),
             Expanded(
               child: _StatisticCard(
-                icon: Icons.local_shipping_outlined,
-                title: 'Paketfahrer',
-                value: '$packageDriverDays',
+                icon: Icons.calendar_view_week_outlined,
+                title: 'Montagszust.',
+                value: '$mondayDeliveryDays',
                 subtitle: 'Arbeitstage',
               ),
             ),
           ],
+        ),
+        const SizedBox(height: 12),
+        _StatisticDetailCard(
+          icon: Icons.local_shipping_outlined,
+          title: 'Paketfahrer',
+          value: '$packageDriverDays Arbeitstage',
+          description:
+              'Arbeitstage, die als Paketfahrer erfasst wurden.',
         ),
         const SizedBox(height: 26),
         const _StatisticsSectionTitle(
@@ -308,6 +323,7 @@ class _StatisticsPageState
           startDate: dateRange.start,
           endDate: dateRange.end,
           workDays: ownDistrictWorkDays,
+          allWorkDays: filteredWorkDays,
           periodLabel: _periodDescription(dateRange),
           extendedAnalyticsEnabled: extendedAnalyticsEnabled,
         ),
@@ -682,6 +698,7 @@ class _PackageDistrictStatistics
     required this.startDate,
     required this.endDate,
     required this.workDays,
+    required this.allWorkDays,
     required this.periodLabel,
     required this.extendedAnalyticsEnabled,
   });
@@ -689,6 +706,7 @@ class _PackageDistrictStatistics
   final DateTime startDate;
   final DateTime endDate;
   final List<WorkDay> workDays;
+  final List<WorkDay> allWorkDays;
   final String periodLabel;
   final bool extendedAnalyticsEnabled;
 
@@ -784,6 +802,40 @@ class _PackageDistrictStatistics
                   ),
                 ),
               ],
+            ),
+
+            const SizedBox(height: 12),
+
+            Row(
+              children: [
+                Expanded(
+                  child: _StatisticCard(
+                    icon: Icons.calendar_view_week_outlined,
+                    title: 'Montagspakete',
+                    value: '${data.mondayDeliveryPackages}',
+                    subtitle: 'zugestellt',
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: _StatisticCard(
+                    icon: Icons.local_shipping_outlined,
+                    title: 'Paketfahrer',
+                    value: '${data.packageDriverPackages}',
+                    subtitle: 'Pakete',
+                  ),
+                ),
+              ],
+            ),
+
+            const SizedBox(height: 12),
+
+            _StatisticDetailCard(
+              icon: Icons.group_outlined,
+              title: 'Unterstützung',
+              value: '${data.supportPackages} Pakete',
+              description:
+                  'Zusätzlich übernommene Pakete im ausgewählten Zeitraum.',
             ),
 
             if (data.cancelledPackages > 0) ...[
@@ -951,7 +1003,37 @@ class _PackageDistrictStatistics
           sum + entry.cancelledPackageCount,
     );
 
-    final supportPackages = 0;
+    final supportPackages =
+        await notifier.getTotalSupportPackagesForDateRange(
+      startDate,
+      endDate,
+    );
+
+    final mondayDeliveryPackages =
+        allWorkDays
+            .where(
+              (workDay) =>
+                  workDay.assignmentType ==
+                  WorkAssignmentType.mondayDelivery,
+            )
+            .fold<int>(
+              0,
+              (sum, workDay) =>
+                  sum + workDay.mondayDeliveryPackageCount,
+            );
+
+    final packageDriverPackages =
+        allWorkDays
+            .where(
+              (workDay) =>
+                  workDay.assignmentType ==
+                  WorkAssignmentType.packageDriver,
+            )
+            .fold<int>(
+              0,
+              (sum, workDay) =>
+                  sum + workDay.packageDriverPackageCount,
+            );
 
     final districtStatistics =
         _buildDistrictStatistics(
@@ -961,6 +1043,8 @@ class _PackageDistrictStatistics
 
     return _PackageStatisticsData(
       ownPackages: ownPackages,
+      mondayDeliveryPackages: mondayDeliveryPackages,
+      packageDriverPackages: packageDriverPackages,
       supportPackages: supportPackages,
       cancelledPackages:
           cancelledPackages,
@@ -1354,6 +1438,8 @@ class _DistrictValue
 class _PackageStatisticsData {
   const _PackageStatisticsData({
     required this.ownPackages,
+    required this.mondayDeliveryPackages,
+    required this.packageDriverPackages,
     required this.supportPackages,
     required this.cancelledPackages,
     required this.totalTours,
@@ -1362,6 +1448,8 @@ class _PackageStatisticsData {
   });
 
   final int ownPackages;
+  final int mondayDeliveryPackages;
+  final int packageDriverPackages;
   final int supportPackages;
   final int cancelledPackages;
   final int totalTours;
@@ -1371,7 +1459,10 @@ class _PackageStatisticsData {
       districtStatistics;
 
   int get totalDeliveredPackages =>
-      ownPackages + supportPackages;
+      ownPackages +
+      mondayDeliveryPackages +
+      packageDriverPackages +
+      supportPackages;
 }
 
 class _DistrictStatistic {

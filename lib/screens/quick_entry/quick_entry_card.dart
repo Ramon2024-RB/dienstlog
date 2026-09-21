@@ -5,6 +5,7 @@ import '../../models/advertising.dart';
 import '../../models/district.dart';
 import '../../models/zsp_location.dart';
 import '../../models/own_tour_entry.dart';
+import '../../models/support_entry.dart';
 import '../../models/work_day.dart';
 import '../../services/advertising_provider.dart';
 import '../../services/district_provider.dart';
@@ -230,6 +231,43 @@ class _QuickEntryCardState
                 context: context,
                 ref: ref,
                 action: _QuickTimeAction.workEnd,
+              ),
+            ),
+
+            const SizedBox(height: 20),
+            const Divider(),
+            const SizedBox(height: 10),
+            Text(
+              'Unterstützung',
+              style: Theme.of(context)
+                  .textTheme
+                  .titleMedium
+                  ?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              'Zusätzliche Hilfe in einem anderen Bezirk direkt erfassen.',
+              style: Theme.of(context)
+                  .textTheme
+                  .bodyMedium
+                  ?.copyWith(
+                    color: Theme.of(context)
+                        .colorScheme
+                        .onSurfaceVariant,
+                  ),
+            ),
+            const SizedBox(height: 12),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: () => _addSupport(
+                  context,
+                  ref,
+                ),
+                icon: const Icon(Icons.add),
+                label: const Text('Unterstützung hinzufügen'),
               ),
             ),
           ],
@@ -586,6 +624,146 @@ class _QuickEntryCardState
       updated,
       ownTourEntries: [ownTour],
     );
+  }
+
+  Future<void> _addSupport(
+    BuildContext context,
+    WidgetRef ref,
+  ) async {
+    final existing = workDay;
+
+    if (existing == null) {
+      _showMessage(
+        context,
+        'Bitte zuerst einen Arbeitstag bzw. Dienstbeginn erfassen.',
+      );
+      return;
+    }
+
+    final zspLocations =
+        ref.read(zspProvider).value ?? const <ZspLocation>[];
+    final districts =
+        ref.read(districtProvider).value ?? const <District>[];
+
+    final activeZspLocations =
+        zspLocations.where((item) => item.isActive).toList();
+
+    ZspLocation? selectedZsp;
+
+    for (final location in activeZspLocations) {
+      if (location.id == existing.zspId) {
+        selectedZsp = location;
+        break;
+      }
+    }
+
+    if (selectedZsp == null) {
+      for (final location in activeZspLocations) {
+        if (location.isDefault) {
+          selectedZsp = location;
+          break;
+        }
+      }
+    }
+
+    if (selectedZsp == null && activeZspLocations.isNotEmpty) {
+      selectedZsp = activeZspLocations.first;
+    }
+
+    if (selectedZsp == null) {
+      _showMessage(
+        context,
+        'Bitte zuerst unter „ZSP & Bezirke“ einen aktiven ZSP anlegen.',
+      );
+      return;
+    }
+
+    final result =
+        await showModalBottomSheet<_SupportResult>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      builder: (context) {
+        return _SupportSheet(
+          initialZspId: selectedZsp!.id,
+          zspLocations: activeZspLocations,
+          districts: districts,
+        );
+      },
+    );
+
+    if (result == null || !context.mounted) {
+      return;
+    }
+
+    String zspName = result.zspId;
+    for (final location in zspLocations) {
+      if (location.id == result.zspId) {
+        zspName = location.displayName;
+        break;
+      }
+    }
+
+    final noteText =
+        result.note == null || result.note!.isEmpty
+            ? ''
+            : '\nNotiz: ${result.note}';
+
+    final confirmed = await _confirm(
+      context,
+      title: 'Unterstützung hinzufügen',
+      message:
+          '$zspName · Bezirk ${result.district}\n'
+          '${result.packagesTaken} Pakete übernommen'
+          '$noteText',
+    );
+
+    if (!confirmed || !context.mounted) {
+      return;
+    }
+
+    try {
+      final notifier =
+          ref.read(workDayProvider.notifier);
+
+      final currentSupportEntries =
+          await notifier.getSupportEntries(existing.id);
+
+      final supportEntry = SupportEntry(
+        workDayId: existing.id,
+        zspId: result.zspId,
+        district: result.district,
+        packagesTaken: result.packagesTaken,
+        note: result.note,
+      );
+
+      await notifier.updateWorkDay(
+        workDay: existing,
+        supportEntries: [
+          ...currentSupportEntries,
+          supportEntry,
+        ],
+      );
+
+      if (!context.mounted) {
+        return;
+      }
+
+      _showMessage(
+        context,
+        'Unterstützung gespeichert: Bezirk ${result.district} · '
+        '${result.packagesTaken} Pakete',
+      );
+    } catch (error) {
+      if (!context.mounted) {
+        return;
+      }
+
+      _showMessage(
+        context,
+        'Die Unterstützung konnte nicht gespeichert werden.',
+      );
+    }
   }
 
   Future<void> _endDelivery(
@@ -1437,6 +1615,248 @@ class _DeliveryStartResult {
   final DistrictPart postPart;
   final bool hasAdvertising;
   final String? advertising;
+}
+
+class _SupportSheet extends StatefulWidget {
+  const _SupportSheet({
+    required this.initialZspId,
+    required this.zspLocations,
+    required this.districts,
+  });
+
+  final String initialZspId;
+  final List<ZspLocation> zspLocations;
+  final List<District> districts;
+
+  @override
+  State<_SupportSheet> createState() => _SupportSheetState();
+}
+
+class _SupportSheetState extends State<_SupportSheet> {
+  late String _selectedZspId;
+  String? _selectedDistrict;
+  late final TextEditingController _packageController;
+  late final TextEditingController _noteController;
+
+  List<District> get _availableDistricts {
+    final result = widget.districts
+        .where(
+          (item) =>
+              item.zspId == _selectedZspId &&
+              item.isActive,
+        )
+        .toList();
+
+    result.sort(
+      (a, b) => a.number.compareTo(b.number),
+    );
+
+    return result;
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _selectedZspId = widget.initialZspId;
+    _packageController = TextEditingController();
+    _noteController = TextEditingController();
+  }
+
+  @override
+  void dispose() {
+    _packageController.dispose();
+    _noteController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final bottomInset =
+        MediaQuery.viewInsetsOf(context).bottom;
+    final availableDistricts = _availableDistricts;
+
+    return Padding(
+      padding: EdgeInsets.fromLTRB(
+        20,
+        8,
+        20,
+        20 + bottomInset,
+      ),
+      child: SingleChildScrollView(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Center(
+              child: Container(
+                width: 40,
+                height: 4,
+                margin: const EdgeInsets.only(bottom: 20),
+                decoration: BoxDecoration(
+                  color: Theme.of(context)
+                      .colorScheme
+                      .outlineVariant,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+            ),
+            Text(
+              'Unterstützung erfassen',
+              style: Theme.of(context)
+                  .textTheme
+                  .headlineSmall
+                  ?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              'Wähle den unterstützten Bezirk und trage die übernommenen Pakete ein.',
+              style: Theme.of(context).textTheme.bodyMedium,
+            ),
+            const SizedBox(height: 24),
+            DropdownButtonFormField<String>(
+              initialValue: _selectedZspId,
+              decoration: const InputDecoration(
+                border: OutlineInputBorder(),
+                labelText: 'ZSP',
+              ),
+              items: widget.zspLocations
+                  .map(
+                    (location) => DropdownMenuItem<String>(
+                      value: location.id,
+                      child: Text(
+                        location.isDefault
+                            ? '${location.displayName} (Standard)'
+                            : location.displayName,
+                      ),
+                    ),
+                  )
+                  .toList(),
+              onChanged: (value) {
+                if (value == null) {
+                  return;
+                }
+
+                setState(() {
+                  _selectedZspId = value;
+                  _selectedDistrict = null;
+                });
+              },
+            ),
+            const SizedBox(height: 16),
+            DropdownButtonFormField<String>(
+              key: ValueKey(
+                'support-district-$_selectedZspId-$_selectedDistrict',
+              ),
+              initialValue: _selectedDistrict,
+              decoration: InputDecoration(
+                border: const OutlineInputBorder(),
+                labelText: 'Bezirk',
+                helperText: availableDistricts.isEmpty
+                    ? 'Für diesen ZSP sind keine aktiven Bezirke hinterlegt.'
+                    : 'Nur aktive Bezirke dieses ZSP werden angezeigt.',
+              ),
+              items: availableDistricts
+                  .map(
+                    (district) => DropdownMenuItem<String>(
+                      value: district.number.toString(),
+                      child: Text('Bezirk ${district.number}'),
+                    ),
+                  )
+                  .toList(),
+              onChanged: availableDistricts.isEmpty
+                  ? null
+                  : (value) {
+                      setState(() {
+                        _selectedDistrict = value;
+                      });
+                    },
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: _packageController,
+              keyboardType: TextInputType.number,
+              decoration: const InputDecoration(
+                border: OutlineInputBorder(),
+                labelText: 'Übernommene Pakete',
+                hintText: 'z. B. 13',
+              ),
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: _noteController,
+              minLines: 2,
+              maxLines: 4,
+              decoration: const InputDecoration(
+                border: OutlineInputBorder(),
+                labelText: 'Notiz',
+                hintText: 'Optional',
+              ),
+            ),
+            const SizedBox(height: 20),
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton.icon(
+                onPressed: _continue,
+                icon: const Icon(Icons.arrow_forward),
+                label: const Text('Weiter zur Bestätigung'),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _continue() {
+    final district = _selectedDistrict;
+    final packagesTaken = int.tryParse(
+      _packageController.text.trim(),
+    );
+
+    if (district == null || district.isEmpty) {
+      _showError('Bitte einen Bezirk auswählen.');
+      return;
+    }
+
+    if (packagesTaken == null || packagesTaken < 0) {
+      _showError(
+        'Bitte eine gültige Paketanzahl eintragen.',
+      );
+      return;
+    }
+
+    final note = _noteController.text.trim();
+
+    Navigator.of(context).pop(
+      _SupportResult(
+        zspId: _selectedZspId,
+        district: district,
+        packagesTaken: packagesTaken,
+        note: note.isEmpty ? null : note,
+      ),
+    );
+  }
+
+  void _showError(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message)),
+    );
+  }
+}
+
+class _SupportResult {
+  const _SupportResult({
+    required this.zspId,
+    required this.district,
+    required this.packagesTaken,
+    required this.note,
+  });
+
+  final String zspId;
+  final String district;
+  final int packagesTaken;
+  final String? note;
 }
 
 class _DeliveryEndSheet

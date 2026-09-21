@@ -191,187 +191,119 @@ class _StatisticsPageState
         false;
 
     return ListView(
-      padding: const EdgeInsets.fromLTRB(
-        16,
-        16,
-        16,
-        40,
-      ),
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 40),
       children: [
         _StatisticsHero(
           period: _periodDescription(dateRange),
           workDayCount: filteredWorkDays.length,
           totalWorkMinutes: totalWorkMinutes,
         ),
-
-        const SizedBox(height: 20),
-
+        const SizedBox(height: 14),
         SizedBox(
           width: double.infinity,
-          child: SegmentedButton<
-              StatisticsPeriod>(
+          child: SegmentedButton<StatisticsPeriod>(
+            showSelectedIcon: false,
             segments: const [
               ButtonSegment(
                 value: StatisticsPeriod.week,
                 label: Text('Woche'),
-                icon: Icon(
-                  Icons.view_week_outlined,
-                ),
               ),
               ButtonSegment(
                 value: StatisticsPeriod.month,
                 label: Text('Monat'),
-                icon: Icon(
-                  Icons.calendar_view_month_outlined,
-                ),
               ),
               ButtonSegment(
                 value: StatisticsPeriod.year,
                 label: Text('Jahr'),
-                icon: Icon(
-                  Icons.calendar_today_outlined,
-                ),
               ),
             ],
-            selected: {
-              _selectedPeriod,
-            },
+            selected: {_selectedPeriod},
             onSelectionChanged: (selection) {
               setState(() {
-                _selectedPeriod =
-                    selection.first;
+                _selectedPeriod = selection.first;
               });
             },
           ),
         ),
-
-        const SizedBox(height: 24),
-
-        Text(
-          'Übersicht',
-          style: Theme.of(context)
-              .textTheme
-              .titleLarge
-              ?.copyWith(
-                fontWeight: FontWeight.bold,
-              ),
+        const SizedBox(height: 26),
+        const _StatisticsSectionTitle(
+          icon: Icons.dashboard_outlined,
+          title: 'Übersicht',
         ),
-
-        const SizedBox(height: 12),
-
+        const SizedBox(height: 10),
         Row(
           children: [
             Expanded(
               child: _StatisticCard(
                 icon: Icons.work_outline,
                 title: 'Arbeitstage',
-                value:
-                    '${filteredWorkDays.length}',
-                subtitle:
-                    'im Zeitraum',
+                value: '${filteredWorkDays.length}',
+                subtitle: 'im Zeitraum',
               ),
             ),
             const SizedBox(width: 12),
             Expanded(
               child: _StatisticCard(
-                icon:
-                    Icons.access_time_outlined,
+                icon: Icons.access_time_outlined,
                 title: 'Arbeitszeit',
-                value: _formatDuration(
-                  totalWorkMinutes,
-                ),
+                value: _formatDuration(totalWorkMinutes),
                 subtitle: 'gesamt',
               ),
             ),
           ],
         ),
-
         const SizedBox(height: 12),
-
         _WorkTimeBalanceStatistics(
           workDays: filteredWorkDays,
         ),
-
         const SizedBox(height: 12),
-
         Row(
           children: [
             Expanded(
               child: _StatisticCard(
                 icon: Icons.route_outlined,
                 title: 'Eigene Tour',
-                value:
-                    '$ownDistrictDays',
+                value: '$ownDistrictDays',
                 subtitle: 'Arbeitstage',
               ),
             ),
             const SizedBox(width: 12),
             Expanded(
               child: _StatisticCard(
-                icon:
-                    Icons.local_shipping_outlined,
+                icon: Icons.local_shipping_outlined,
                 title: 'Paketfahrer',
-                value:
-                    '$packageDriverDays',
+                value: '$packageDriverDays',
                 subtitle: 'Arbeitstage',
               ),
             ),
           ],
         ),
-
-        const SizedBox(height: 24),
-
-        Text(
-          'Zeiten',
-          style: Theme.of(context)
-              .textTheme
-              .titleLarge
-              ?.copyWith(
-                fontWeight: FontWeight.bold,
-              ),
+        const SizedBox(height: 26),
+        const _StatisticsSectionTitle(
+          icon: Icons.schedule_outlined,
+          title: 'Zeiten',
         ),
-
-        const SizedBox(height: 12),
-
+        const SizedBox(height: 10),
         _StatisticDetailCard(
           icon: Icons.schedule_outlined,
-          title:
-              'Durchschnittliche Arbeitszeit',
-          value: _formatDuration(
-            averageWorkMinutes,
-          ),
+          title: 'Ø Arbeitszeit',
+          value: _formatDuration(averageWorkMinutes),
           description:
               'Durchschnitt pro Arbeitstag mit eingetragener Arbeitszeit.',
         ),
-
         const SizedBox(height: 12),
-
         _StatisticDetailCard(
-          icon: Icons
-              .local_shipping_outlined,
-          title:
-              'Durchschnittliche Zustellzeit',
-          value: _formatDuration(
-            averageDeliveryMinutes,
-          ),
-          description:
-              'Zeit zwischen Abfahrt und Zustellende.',
+          icon: Icons.local_shipping_outlined,
+          title: 'Ø Zustellzeit',
+          value: _formatDuration(averageDeliveryMinutes),
+          description: 'Zeit zwischen Abfahrt und Zustellende.',
         ),
-
-        const SizedBox(height: 24),
-
-        Text(
-          'Pakete & Bezirke',
-          style: Theme.of(context)
-              .textTheme
-              .titleLarge
-              ?.copyWith(
-                fontWeight: FontWeight.bold,
-              ),
+        const SizedBox(height: 26),
+        const _StatisticsSectionTitle(
+          icon: Icons.inventory_2_outlined,
+          title: 'Pakete & Bezirke',
         ),
-
-        const SizedBox(height: 12),
-
+        const SizedBox(height: 10),
         _PackageDistrictStatistics(
           startDate: dateRange.start,
           endDate: dateRange.end,
@@ -503,57 +435,154 @@ class _StatisticsHero extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(18),
+      padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.primaryContainer,
-        borderRadius: BorderRadius.circular(22),
+        color: theme.colorScheme.primaryContainer.withValues(alpha: 0.42),
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(
+          color: theme.colorScheme.primary.withValues(alpha: 0.14),
+        ),
       ),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Container(
-            width: 48,
-            height: 48,
-            decoration: BoxDecoration(
-              color: Theme.of(context).colorScheme.surface,
-              borderRadius: BorderRadius.circular(16),
-            ),
-            child: Icon(
-              Icons.bar_chart_outlined,
-              color: Theme.of(context).colorScheme.primary,
+          Row(
+            children: [
+              Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.surface.withValues(alpha: 0.78),
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: Icon(
+                  Icons.insights_outlined,
+                  color: theme.colorScheme.primary,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Deine Auswertung',
+                      style: theme.textTheme.titleLarge?.copyWith(
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: -0.3,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      period,
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 20),
+          Row(
+            children: [
+              Expanded(
+                child: _HeroMetric(
+                  value: '$workDayCount',
+                  label: 'Arbeitstage',
+                ),
+              ),
+              Container(
+                width: 1,
+                height: 42,
+                color: theme.colorScheme.outlineVariant,
+              ),
+              Expanded(
+                child: _HeroMetric(
+                  value: _formatDuration(totalWorkMinutes),
+                  label: 'Arbeitszeit',
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _HeroMetric extends StatelessWidget {
+  const _HeroMetric({
+    required this.value,
+    required this.label,
+  });
+
+  final String value;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            value,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: theme.textTheme.titleLarge?.copyWith(
+              fontWeight: FontWeight.w800,
             ),
           ),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Deine Auswertung',
-                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                        fontWeight: FontWeight.bold,
-                      ),
-                ),
-                const SizedBox(height: 3),
-                Text(
-                  period,
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: Theme.of(context).colorScheme.onSurfaceVariant,
-                      ),
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  '$workDayCount Arbeitstage · ${_formatDuration(totalWorkMinutes)}',
-                  style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                        fontWeight: FontWeight.w600,
-                      ),
-                ),
-              ],
+          const SizedBox(height: 2),
+          Text(
+            label,
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
             ),
           ),
         ],
       ),
+    );
+  }
+}
+
+class _StatisticsSectionTitle extends StatelessWidget {
+  const _StatisticsSectionTitle({
+    required this.icon,
+    required this.title,
+  });
+
+  final IconData icon;
+  final String title;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return Row(
+      children: [
+        Icon(
+          icon,
+          size: 22,
+          color: theme.colorScheme.primary,
+        ),
+        const SizedBox(width: 9),
+        Text(
+          title,
+          style: theme.textTheme.titleLarge?.copyWith(
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+      ],
     );
   }
 }
@@ -757,45 +786,21 @@ class _PackageDistrictStatistics
               ],
             ),
 
-            const SizedBox(height: 12),
-
-            Row(
-              children: [
-                Expanded(
-                  child: _StatisticCard(
-                    icon:
-                        Icons.done_all_outlined,
-                    title: 'Eigene Pakete gesamt',
-                    value:
-                        '${data.ownPackages}',
-                    subtitle: 'zugestellt',
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: _StatisticCard(
-                    icon:
-                        Icons.cancel_outlined,
-                    title: 'Abgebrochen',
-                    value:
-                        '${data.cancelledPackages}',
-                    subtitle:
-                        'eigene Pakete',
-                  ),
-                ),
-              ],
-            ),
+            if (data.cancelledPackages > 0) ...[
+              const SizedBox(height: 12),
+              _StatisticDetailCard(
+                icon: Icons.cancel_outlined,
+                title: 'Abgebrochene Pakete',
+                value: '${data.cancelledPackages}',
+                description: 'Eigene Pakete im ausgewählten Zeitraum.',
+              ),
+            ],
 
             const SizedBox(height: 24),
 
-            Text(
-              'Bezirke',
-              style: Theme.of(context)
-                  .textTheme
-                  .titleMedium
-                  ?.copyWith(
-                    fontWeight: FontWeight.bold,
-                  ),
+            const _StatisticsSectionTitle(
+              icon: Icons.map_outlined,
+              title: 'Bezirke',
             ),
 
             const SizedBox(height: 12),
@@ -835,12 +840,8 @@ class _PackageDistrictStatistics
             else ...[
               Text(
                 'Gefahrene Bezirke',
-                style: Theme.of(context)
-                    .textTheme
-                    .titleMedium
-                    ?.copyWith(
-                      fontWeight:
-                          FontWeight.bold,
+                style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w800,
                     ),
               ),
 

@@ -163,42 +163,30 @@ class _WorkSchedulePageState
         32,
       ),
       children: [
-        _PageIntroCard(
-          icon: Icons.event_note_outlined,
-          title: 'Dein Arbeitsplan',
-          subtitle: _isMultiSelectMode
-              ? 'Wähle mehrere Tage aus und plane sie gemeinsam.'
-              : 'Plane hier deine voraussichtlichen Einsätze.',
+        _ScheduleHeader(
+          month:
+              '${_monthNames[_visibleMonth.month - 1]} '
+              '${_visibleMonth.year}',
+          isMultiSelectMode: _isMultiSelectMode,
+          onPrevious: _showPreviousMonth,
+          onNext: _showNextMonth,
         ),
-        const SizedBox(height: 20),
-        const _SectionTitle(
-          icon: Icons.calendar_month_outlined,
-          title: 'Monatsplan',
-        ),
-        const SizedBox(height: 10),
+        const SizedBox(height: 12),
         Card(
           clipBehavior: Clip.antiAlias,
           child: Padding(
             padding: const EdgeInsets.fromLTRB(
-              12,
-              8,
-              12,
-              16,
+              10,
+              14,
+              10,
+              14,
             ),
             child: Column(
               children: [
-                _MonthHeader(
-                  month:
-                      '${_monthNames[_visibleMonth.month - 1]} '
-                      '${_visibleMonth.year}',
-                  onPrevious: _showPreviousMonth,
-                  onNext: _showNextMonth,
-                ),
-                const SizedBox(height: 8),
                 _WeekDayHeader(
                   weekDayNames: _weekDayNames,
                 ),
-                const SizedBox(height: 4),
+                const SizedBox(height: 8),
                 _buildCalendarGrid(
                   context,
                   monthEntries,
@@ -206,6 +194,10 @@ class _WorkSchedulePageState
               ],
             ),
           ),
+        ),
+        const SizedBox(height: 12),
+        _PlanningHint(
+          isMultiSelectMode: _isMultiSelectMode,
         ),
         if (_isMultiSelectMode) ...[
           const SizedBox(height: 20),
@@ -280,9 +272,9 @@ class _WorkSchedulePageState
       gridDelegate:
           const SliverGridDelegateWithFixedCrossAxisCount(
         crossAxisCount: 7,
-        childAspectRatio: 0.78,
-        crossAxisSpacing: 3,
-        mainAxisSpacing: 3,
+        childAspectRatio: 0.82,
+        crossAxisSpacing: 4,
+        mainAxisSpacing: 4,
       ),
       itemCount: totalCells,
       itemBuilder: (context, index) {
@@ -557,60 +549,72 @@ class _WorkSchedulePageState
   }
 }
 
-class _PageIntroCard extends StatelessWidget {
-  const _PageIntroCard({
-    required this.icon,
-    required this.title,
-    required this.subtitle,
+class _ScheduleHeader extends StatelessWidget {
+  const _ScheduleHeader({
+    required this.month,
+    required this.isMultiSelectMode,
+    required this.onPrevious,
+    required this.onNext,
   });
 
-  final IconData icon;
-  final String title;
-  final String subtitle;
+  final String month;
+  final bool isMultiSelectMode;
+  final VoidCallback onPrevious;
+  final VoidCallback onNext;
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(18),
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
       decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.primaryContainer,
+        color: theme.colorScheme.primaryContainer.withValues(alpha: 0.42),
         borderRadius: BorderRadius.circular(22),
+        border: Border.all(
+          color: theme.colorScheme.primary.withValues(alpha: 0.14),
+        ),
       ),
-      child: Row(
+      child: Column(
         children: [
-          Container(
-            width: 48,
-            height: 48,
-            decoration: BoxDecoration(
-              color: Theme.of(context).colorScheme.surface,
-              borderRadius: BorderRadius.circular(16),
-            ),
-            child: Icon(
-              icon,
-              color: Theme.of(context).colorScheme.primary,
-            ),
-          ),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                        fontWeight: FontWeight.bold,
+          Row(
+            children: [
+              IconButton(
+                tooltip: 'Vorheriger Monat',
+                onPressed: onPrevious,
+                icon: const Icon(Icons.chevron_left),
+              ),
+              Expanded(
+                child: Column(
+                  children: [
+                    Text(
+                      month,
+                      textAlign: TextAlign.center,
+                      style: theme.textTheme.titleLarge?.copyWith(
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: -0.3,
                       ),
-                ),
-                const SizedBox(height: 3),
-                Text(
-                  subtitle,
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      isMultiSelectMode
+                          ? 'Mehrere Tage auswählen'
+                          : 'Tippe auf einen Tag zum Planen',
+                      textAlign: TextAlign.center,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant,
                       ),
+                    ),
+                  ],
                 ),
-              ],
-            ),
+              ),
+              IconButton(
+                tooltip: 'Nächster Monat',
+                onPressed: onNext,
+                icon: const Icon(Icons.chevron_right),
+              ),
+            ],
           ),
         ],
       ),
@@ -618,75 +622,35 @@ class _PageIntroCard extends StatelessWidget {
   }
 }
 
-class _SectionTitle extends StatelessWidget {
-  const _SectionTitle({
-    required this.icon,
-    required this.title,
+class _PlanningHint extends StatelessWidget {
+  const _PlanningHint({
+    required this.isMultiSelectMode,
   });
 
-  final IconData icon;
-  final String title;
+  final bool isMultiSelectMode;
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
     return Row(
       children: [
         Icon(
-          icon,
-          size: 20,
-          color: Theme.of(context).colorScheme.primary,
+          isMultiSelectMode
+              ? Icons.library_add_check_outlined
+              : Icons.touch_app_outlined,
+          size: 18,
+          color: theme.colorScheme.primary,
         ),
         const SizedBox(width: 8),
-        Text(
-          title,
-          style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                fontWeight: FontWeight.bold,
-              ),
-        ),
-      ],
-    );
-  }
-}
-
-class _MonthHeader extends StatelessWidget {
-  const _MonthHeader({
-    required this.month,
-    required this.onPrevious,
-    required this.onNext,
-  });
-
-  final String month;
-  final VoidCallback onPrevious;
-  final VoidCallback onNext;
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        IconButton(
-          tooltip: 'Vorheriger Monat',
-          onPressed: onPrevious,
-          icon: const Icon(
-            Icons.chevron_left,
-          ),
-        ),
         Expanded(
           child: Text(
-            month,
-            textAlign: TextAlign.center,
-            style: Theme.of(context)
-                .textTheme
-                .titleLarge
-                ?.copyWith(
-                  fontWeight: FontWeight.bold,
-                ),
-          ),
-        ),
-        IconButton(
-          tooltip: 'Nächster Monat',
-          onPressed: onNext,
-          icon: const Icon(
-            Icons.chevron_right,
+            isMultiSelectMode
+                ? 'Markiere alle Tage, die dieselbe Planung bekommen sollen.'
+                : 'Ein Tag öffnet die Planung. Über das Symbol oben kannst du mehrere Tage gleichzeitig bearbeiten.',
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
           ),
         ),
       ],
@@ -757,16 +721,14 @@ class _CalendarDay extends StatelessWidget {
           );
 
     return Material(
-      color: entryColor ??
-          colorScheme.surfaceContainerLow,
-      borderRadius: BorderRadius.circular(12),
+      color: entryColor ?? colorScheme.surfaceContainerLow,
+      borderRadius: BorderRadius.circular(13),
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(13),
         child: Container(
           decoration: BoxDecoration(
-            borderRadius:
-                BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(13),
             border: isSelected
                 ? Border.all(
                     color: colorScheme.primary,
@@ -777,57 +739,45 @@ class _CalendarDay extends StatelessWidget {
                         color: colorScheme.primary,
                         width: 2,
                       )
-                    : null,
+                    : Border.all(
+                        color: colorScheme.outlineVariant.withValues(
+                          alpha: 0.25,
+                        ),
+                      ),
           ),
           padding: const EdgeInsets.symmetric(
             horizontal: 2,
-            vertical: 5,
+            vertical: 6,
           ),
           child: Column(
             children: [
               Text(
                 '${date.day}',
-                style: Theme.of(context)
-                    .textTheme
-                    .labelLarge
-                    ?.copyWith(
-                      fontWeight: isToday
-                          ? FontWeight.bold
-                          : FontWeight.normal,
+                style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                      fontWeight: isToday || entry != null
+                          ? FontWeight.w800
+                          : FontWeight.w500,
                     ),
               ),
               if (entry != null) ...[
-                const SizedBox(height: 3),
+                const Spacer(),
                 Icon(
-                  _scheduleTypeIcon(
-                    entry!.type,
-                  ),
-                  size: 15,
+                  _scheduleTypeIcon(entry!.type),
+                  size: 16,
                 ),
-                const SizedBox(height: 2),
-                Expanded(
-                  child: Center(
-                    child: Text(
-                      _shortEntryLabel(
-                        entry!,
+                const SizedBox(height: 3),
+                Text(
+                  _shortEntryLabel(entry!),
+                  textAlign: TextAlign.center,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                        fontSize: 9,
+                        height: 1.05,
+                        fontWeight: FontWeight.w700,
                       ),
-                      textAlign:
-                          TextAlign.center,
-                      maxLines: 2,
-                      overflow:
-                          TextOverflow.ellipsis,
-                      style: Theme.of(context)
-                          .textTheme
-                          .labelSmall
-                          ?.copyWith(
-                            fontSize: 9,
-                            height: 1.05,
-                            fontWeight:
-                                FontWeight.w600,
-                          ),
-                    ),
-                  ),
                 ),
+                const Spacer(),
               ],
             ],
           ),
@@ -869,13 +819,12 @@ class _CalendarDay extends StatelessWidget {
 class _Legend extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Wrap(
-          spacing: 16,
-          runSpacing: 12,
-          children: const [
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 4),
+      child: Wrap(
+        spacing: 16,
+        runSpacing: 12,
+        children: const [
             _LegendItem(
               icon: Icons.route_outlined,
               label: 'Bezirk',
@@ -899,8 +848,7 @@ class _Legend extends StatelessWidget {
                   Icons.celebration_outlined,
               label: 'Feiertag',
             ),
-          ],
-        ),
+        ],
       ),
     );
   }

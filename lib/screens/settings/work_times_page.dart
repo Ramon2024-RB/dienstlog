@@ -217,33 +217,99 @@ class _WorkTimesPageState extends State<WorkTimesPage> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Arbeitszeiten'),
+        title: const Text(
+          'Arbeitszeiten',
+          style: TextStyle(fontWeight: FontWeight.bold),
+        ),
       ),
       body: _isLoading
           ? const Center(
               child: CircularProgressIndicator(),
             )
           : ListView(
-              padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
               children: [
-                Text(
-                  'Soll-Arbeitszeiten',
-                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                        fontWeight: FontWeight.bold,
+                Container(
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    color: theme.colorScheme.primaryContainer
+                        .withValues(alpha: 0.42),
+                    borderRadius: BorderRadius.circular(24),
+                    border: Border.all(
+                      color: theme.colorScheme.primary.withValues(alpha: 0.14),
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 48,
+                        height: 48,
+                        decoration: BoxDecoration(
+                          color:
+                              theme.colorScheme.surface.withValues(alpha: 0.78),
+                          borderRadius: BorderRadius.circular(15),
+                        ),
+                        child: Icon(
+                          Icons.schedule_outlined,
+                          color: theme.colorScheme.primary,
+                        ),
                       ),
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  'Lege Start, Ende und optional eine Pause für jeden Wochentag fest.',
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: Theme.of(context)
-                            .colorScheme
-                            .onSurfaceVariant,
+                      const SizedBox(width: 14),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Deine Sollzeiten',
+                              style: theme.textTheme.titleLarge?.copyWith(
+                                fontWeight: FontWeight.w800,
+                                letterSpacing: -0.3,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              'Lege Start, Ende und Pause für deine regulären Arbeitstage fest.',
+                              style: theme.textTheme.bodyMedium?.copyWith(
+                                color: theme.colorScheme.onSurfaceVariant,
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
+                    ],
+                  ),
                 ),
-                const SizedBox(height: 16),
+                const SizedBox(height: 24),
+                Row(
+                  children: [
+                    Icon(
+                      Icons.calendar_view_week_outlined,
+                      size: 21,
+                      color: theme.colorScheme.primary,
+                    ),
+                    const SizedBox(width: 9),
+                    Expanded(
+                      child: Text(
+                        'Wochenplan',
+                        style: theme.textTheme.titleLarge?.copyWith(
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 7),
+                Text(
+                  'Die Soll-Arbeitszeit wird automatisch aus Start, Ende und Pause berechnet.',
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                ),
+                const SizedBox(height: 14),
                 for (var day = DateTime.monday;
                     day <= DateTime.saturday;
                     day++) ...[
@@ -256,25 +322,27 @@ class _WorkTimesPageState extends State<WorkTimesPage> {
                     onBreakTap: () => _selectBreak(day),
                     onClear: () => _clearDay(day),
                   ),
-                  const SizedBox(height: 12),
+                  const SizedBox(height: 10),
                 ],
                 const SizedBox(height: 8),
-                FilledButton.icon(
-                  onPressed: _isSaving ? null : _save,
-                  icon: _isSaving
-                      ? const SizedBox(
-                          width: 18,
-                          height: 18,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                          ),
-                        )
-                      : const Icon(Icons.save_outlined),
-                  label: Text(
-                    _isSaving ? 'Speichern …' : 'Speichern',
+                SizedBox(
+                  height: 52,
+                  child: FilledButton.icon(
+                    onPressed: _isSaving ? null : _save,
+                    icon: _isSaving
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                            ),
+                          )
+                        : const Icon(Icons.save_outlined),
+                    label: Text(
+                      _isSaving ? 'Speichern …' : 'Arbeitszeiten speichern',
+                    ),
                   ),
                 ),
-
               ],
             ),
     );
@@ -300,23 +368,60 @@ class _DayCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     final targetMinutes = setting.targetMinutes;
 
     return Card(
-      margin: EdgeInsets.zero,
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.fromLTRB(16, 14, 16, 15),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
               children: [
-                Expanded(
+                Container(
+                  width: 42,
+                  height: 42,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    color: theme.colorScheme.primaryContainer
+                        .withValues(alpha: 0.72),
+                    borderRadius: BorderRadius.circular(13),
+                  ),
                   child: Text(
-                    _weekdayName(weekday),
-                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.bold,
+                    _weekdayShortName(weekday),
+                    style: theme.textTheme.labelLarge?.copyWith(
+                      fontWeight: FontWeight.w900,
+                      color: theme.colorScheme.onPrimaryContainer,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        _weekdayName(weekday),
+                        style: theme.textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.w800,
                         ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        targetMinutes == null
+                            ? 'Keine Soll-Arbeitszeit'
+                            : 'Soll: ${_formatDuration(targetMinutes)}',
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          color: targetMinutes == null
+                              ? theme.colorScheme.onSurfaceVariant
+                              : theme.colorScheme.primary,
+                          fontWeight: targetMinutes == null
+                              ? FontWeight.normal
+                              : FontWeight.w700,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
                 if (setting.hasValues)
@@ -327,11 +432,12 @@ class _DayCard extends StatelessWidget {
                   ),
               ],
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 14),
             Row(
               children: [
                 Expanded(
                   child: _SettingButton(
+                    icon: Icons.login_outlined,
                     label: 'Start',
                     value: _formatMinutes(setting.startMinutes),
                     onTap: onStartTap,
@@ -340,6 +446,7 @@ class _DayCard extends StatelessWidget {
                 const SizedBox(width: 8),
                 Expanded(
                   child: _SettingButton(
+                    icon: Icons.logout_outlined,
                     label: 'Ende',
                     value: _formatMinutes(setting.endMinutes),
                     onTap: onEndTap,
@@ -348,6 +455,7 @@ class _DayCard extends StatelessWidget {
                 const SizedBox(width: 8),
                 Expanded(
                   child: _SettingButton(
+                    icon: Icons.coffee_outlined,
                     label: 'Pause',
                     value: setting.breakMinutes == null
                         ? 'Keine'
@@ -357,25 +465,6 @@ class _DayCard extends StatelessWidget {
                 ),
               ],
             ),
-            if (targetMinutes != null) ...[
-              const SizedBox(height: 12),
-              Text(
-                'Soll-Arbeitszeit: ${_formatDuration(targetMinutes)}',
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      fontWeight: FontWeight.w600,
-                    ),
-              ),
-            ] else ...[
-              const SizedBox(height: 12),
-              Text(
-                'Keine Soll-Arbeitszeit',
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: Theme.of(context)
-                          .colorScheme
-                          .onSurfaceVariant,
-                    ),
-              ),
-            ],
           ],
         ),
       ),
@@ -385,42 +474,64 @@ class _DayCard extends StatelessWidget {
 
 class _SettingButton extends StatelessWidget {
   const _SettingButton({
+    required this.icon,
     required this.label,
     required this.value,
     required this.onTap,
   });
 
+  final IconData icon;
   final String label;
   final String value;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    return OutlinedButton(
-      onPressed: onTap,
-      style: OutlinedButton.styleFrom(
+    final theme = Theme.of(context);
+
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(14),
+      child: Ink(
         padding: const EdgeInsets.symmetric(
-          horizontal: 10,
-          vertical: 12,
+          horizontal: 8,
+          vertical: 11,
         ),
-      ),
-      child: Column(
-        children: [
-          Text(
-            label,
-            style: Theme.of(context).textTheme.labelSmall,
-          ),
-          const SizedBox(height: 3),
-          Text(
-            value,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-          ),
-        ],
+        decoration: BoxDecoration(
+          color: theme.colorScheme.surfaceContainerHighest
+              .withValues(alpha: 0.42),
+          borderRadius: BorderRadius.circular(14),
+        ),
+        child: Column(
+          children: [
+            Icon(
+              icon,
+              size: 18,
+              color: theme.colorScheme.primary,
+            ),
+            const SizedBox(height: 5),
+            Text(
+              label,
+              style: theme.textTheme.labelSmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+            const SizedBox(height: 2),
+            Text(
+              value,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: theme.textTheme.bodyMedium?.copyWith(
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
 }
+
 
 class _WorkTimeSetting {
   const _WorkTimeSetting({
@@ -500,6 +611,27 @@ String _formatDuration(int minutes) {
   }
 
   return '$hours h $mins min';
+}
+
+String _weekdayShortName(int weekday) {
+  switch (weekday) {
+    case DateTime.monday:
+      return 'MO';
+    case DateTime.tuesday:
+      return 'DI';
+    case DateTime.wednesday:
+      return 'MI';
+    case DateTime.thursday:
+      return 'DO';
+    case DateTime.friday:
+      return 'FR';
+    case DateTime.saturday:
+      return 'SA';
+    case DateTime.sunday:
+      return 'SO';
+    default:
+      return '';
+  }
 }
 
 String _weekdayName(int weekday) {

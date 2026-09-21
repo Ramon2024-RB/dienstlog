@@ -139,71 +139,197 @@ class _BackupPageState extends State<BackupPage> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isBusy = _isExportingBackup || _isImportingBackup;
+
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Daten & Backup'),
+        title: const Text(
+          'Daten & Backup',
+          style: TextStyle(fontWeight: FontWeight.bold),
+        ),
       ),
       body: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
+        padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
         children: [
-          Text(
-            'Datensicherung',
-            style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                  fontWeight: FontWeight.bold,
+          Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: theme.colorScheme.primaryContainer.withValues(alpha: 0.42),
+              borderRadius: BorderRadius.circular(24),
+              border: Border.all(
+                color: theme.colorScheme.primary.withValues(alpha: 0.14),
+              ),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  width: 48,
+                  height: 48,
+                  decoration: BoxDecoration(
+                    color: theme.colorScheme.surface.withValues(alpha: 0.78),
+                    borderRadius: BorderRadius.circular(15),
+                  ),
+                  child: Icon(
+                    Icons.backup_outlined,
+                    color: theme.colorScheme.primary,
+                  ),
                 ),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            'Sichere deine TourLog-Daten als Datei oder stelle sie aus einem Backup wieder her.',
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Deine TourLog-Daten',
+                        style: theme.textTheme.titleLarge?.copyWith(
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: -0.3,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Sichere deine Daten als Datei und stelle sie bei Bedarf wieder her.',
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          color: theme.colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
+              ],
+            ),
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 24),
+          Row(
+            children: [
+              Icon(
+                Icons.shield_outlined,
+                size: 21,
+                color: theme.colorScheme.primary,
+              ),
+              const SizedBox(width: 9),
+              Text(
+                'Datensicherung',
+                style: theme.textTheme.titleLarge?.copyWith(
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 7),
+          Text(
+            'Ein Backup enthält deine in TourLog gespeicherten Daten und kann später wieder importiert werden.',
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          ),
+          const SizedBox(height: 14),
           Card(
-            margin: EdgeInsets.zero,
             child: Column(
               children: [
-                ListTile(
-                  leading: const Icon(Icons.ios_share_outlined),
-                  title: const Text('Backup exportieren'),
-                  subtitle: const Text(
-                    'Alle TourLog-Daten als Backup-Datei sichern',
-                  ),
-                  trailing: _isExportingBackup
-                      ? const SizedBox(
-                          width: 22,
-                          height: 22,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Icon(Icons.chevron_right),
-                  onTap: _isExportingBackup || _isImportingBackup
-                      ? null
-                      : _exportBackup,
+                _BackupTile(
+                  icon: Icons.ios_share_outlined,
+                  title: 'Backup exportieren',
+                  subtitle: 'Aktuelle TourLog-Daten als Backup-Datei sichern',
+                  isLoading: _isExportingBackup,
+                  onTap: isBusy ? null : _exportBackup,
                 ),
                 const Divider(height: 1),
-                ListTile(
-                  leading: const Icon(Icons.settings_backup_restore_outlined),
-                  title: const Text('Backup importieren'),
-                  subtitle: const Text(
-                    'Gesicherte TourLog-Daten wiederherstellen',
+                _BackupTile(
+                  icon: Icons.settings_backup_restore_outlined,
+                  title: 'Backup importieren',
+                  subtitle: 'Gesicherte TourLog-Daten wiederherstellen',
+                  isLoading: _isImportingBackup,
+                  onTap: isBusy ? null : _importBackup,
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 18),
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: theme.colorScheme.surfaceContainerHighest
+                  .withValues(alpha: 0.38),
+              borderRadius: BorderRadius.circular(18),
+            ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(
+                  Icons.info_outline,
+                  size: 21,
+                  color: theme.colorScheme.primary,
+                ),
+                const SizedBox(width: 11),
+                Expanded(
+                  child: Text(
+                    'Beim Import werden die aktuell gespeicherten TourLog-Daten vollständig durch das ausgewählte Backup ersetzt. Erstelle deshalb vor einem Import am besten zuerst ein aktuelles Backup.',
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
                   ),
-                  trailing: _isImportingBackup
-                      ? const SizedBox(
-                          width: 22,
-                          height: 22,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Icon(Icons.chevron_right),
-                  onTap: _isExportingBackup || _isImportingBackup
-                      ? null
-                      : _importBackup,
                 ),
               ],
             ),
           ),
         ],
       ),
+    );
+  }
+}
+
+class _BackupTile extends StatelessWidget {
+  const _BackupTile({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.isLoading,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final bool isLoading;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return ListTile(
+      contentPadding: const EdgeInsets.fromLTRB(16, 10, 10, 10),
+      enabled: onTap != null || isLoading,
+      leading: Container(
+        width: 46,
+        height: 46,
+        decoration: BoxDecoration(
+          color: theme.colorScheme.primaryContainer.withValues(alpha: 0.72),
+          borderRadius: BorderRadius.circular(14),
+        ),
+        child: Icon(
+          icon,
+          color: theme.colorScheme.onPrimaryContainer,
+        ),
+      ),
+      title: Text(
+        title,
+        style: const TextStyle(fontWeight: FontWeight.w700),
+      ),
+      subtitle: Padding(
+        padding: const EdgeInsets.only(top: 3),
+        child: Text(subtitle),
+      ),
+      trailing: isLoading
+          ? const SizedBox(
+              width: 22,
+              height: 22,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            )
+          : const Icon(Icons.chevron_right),
+      onTap: onTap,
     );
   }
 }

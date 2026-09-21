@@ -7,13 +7,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'screens/calendar/calendar_page.dart';
 import 'screens/home/home_page.dart';
+import 'screens/more/more_page.dart';
 import 'screens/quick_entry/quick_entry_card.dart';
-import 'screens/districts/districts_page.dart';
 import 'screens/statistics/statistics_page.dart';
-import 'screens/settings/advertising_page.dart';
-import 'screens/settings/settings_page.dart';
-import 'screens/settings/work_times_page.dart';
-import 'screens/settings/backup_page.dart';
 import 'screens/work_schedule/work_schedule_page.dart';
 
 void main() {
@@ -194,7 +190,7 @@ class _MainNavigationPageState
       const WorkSchedulePage(),
       const CalendarPage(),
       const StatisticsPage(),
-      const _MorePage(),
+      const MorePage(),
     ];
 
     return Scaffold(
@@ -230,156 +226,6 @@ class _MainNavigationPageState
             icon: Icon(Icons.more_horiz),
             selectedIcon: Icon(Icons.more_horiz),
             label: 'Mehr',
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _MorePage extends StatelessWidget {
-  const _MorePage();
-
-  @override
-  Widget build(
-    BuildContext context,
-  ) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text(
-          'Mehr',
-          style: TextStyle(
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-      ),
-      body: ListView(
-        padding: const EdgeInsets.fromLTRB(
-          20,
-          16,
-          20,
-          32,
-        ),
-        children: [
-          Card(
-            child: Column(
-              children: [
-                ListTile(
-                  leading: const Icon(
-                    Icons.route_outlined,
-                  ),
-                  title: const Text(
-                    'ZSP & Bezirke',
-                  ),
-                  subtitle: const Text(
-                    'Standorte und Bezirke verwalten',
-                  ),
-                  trailing: const Icon(
-                    Icons.chevron_right,
-                  ),
-                  onTap: () {
-                    Navigator.of(context).push(
-                      MaterialPageRoute<void>(
-                        builder: (context) =>
-                            const DistrictsPage(),
-                      ),
-                    );
-                  },
-                ),
-                const Divider(height: 1),
-                ListTile(
-                  leading: const Icon(
-                    Icons.campaign_outlined,
-                  ),
-                  title: const Text(
-                    'Werbung',
-                  ),
-                  subtitle: const Text(
-                    'Gespeicherte Werbungen verwalten',
-                  ),
-                  trailing: const Icon(
-                    Icons.chevron_right,
-                  ),
-                  onTap: () {
-                    Navigator.of(context).push(
-                      MaterialPageRoute<void>(
-                        builder: (context) =>
-                            const AdvertisingPage(),
-                      ),
-                    );
-                  },
-                ),
-                const Divider(height: 1),
-                ListTile(
-                  leading: const Icon(
-                    Icons.schedule_outlined,
-                  ),
-                  title: const Text(
-                    'Arbeitszeiten',
-                  ),
-                  subtitle: const Text(
-                    'Sollzeiten und Pausen verwalten',
-                  ),
-                  trailing: const Icon(
-                    Icons.chevron_right,
-                  ),
-                  onTap: () {
-                    Navigator.of(context).push(
-                      MaterialPageRoute<void>(
-                        builder: (context) =>
-                            const WorkTimesPage(),
-                      ),
-                    );
-                  },
-                ),
-                const Divider(height: 1),
-                ListTile(
-                  leading: const Icon(
-                    Icons.backup_outlined,
-                  ),
-                  title: const Text(
-                    'Daten & Backup',
-                  ),
-                  subtitle: const Text(
-                    'Daten exportieren und wiederherstellen',
-                  ),
-                  trailing: const Icon(
-                    Icons.chevron_right,
-                  ),
-                  onTap: () {
-                    Navigator.of(context).push(
-                      MaterialPageRoute<void>(
-                        builder: (context) =>
-                            const BackupPage(),
-                      ),
-                    );
-                  },
-                ),
-                const Divider(height: 1),
-                ListTile(
-                  leading: const Icon(
-                    Icons.settings_outlined,
-                  ),
-                  title: const Text(
-                    'Einstellungen',
-                  ),
-                  subtitle: const Text(
-                    'Allgemeine App-Einstellungen',
-                  ),
-                  trailing: const Icon(
-                    Icons.chevron_right,
-                  ),
-                  onTap: () {
-                    Navigator.of(context).push(
-                      MaterialPageRoute<void>(
-                        builder: (context) =>
-                            const SettingsPage(),
-                      ),
-                    );
-                  },
-                ),
-              ],
-            ),
           ),
         ],
       ),

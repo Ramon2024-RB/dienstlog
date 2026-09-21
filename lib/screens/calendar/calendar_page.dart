@@ -311,43 +311,43 @@ class _CalendarContent extends StatelessWidget {
         if (workDay.type != WorkDayType.work) {
           return sum;
         }
-
         return sum + (workDay.workDurationMinutes ?? 0);
       },
     );
 
     return ListView(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
       children: [
-        const _CalendarIntroCard(),
-        const SizedBox(height: 20),
-        const _CalendarSectionTitle(
-          icon: Icons.calendar_month_outlined,
-          title: 'Monatskalender',
-        ),
-        const SizedBox(height: 10),
-        _MonthHeader(
+        _CalendarMonthHeader(
           visibleMonth: visibleMonth,
           onPreviousMonth: onPreviousMonth,
           onNextMonth: onNextMonth,
           onTodayPressed: onTodayPressed,
         ),
-        const SizedBox(height: 16),
-        _WeekdayHeader(),
-        const SizedBox(height: 8),
-        _MonthGrid(
-          visibleMonth: visibleMonth,
-          workDays: workDays,
-          onDatePressed: onDatePressed,
-        ),
-        const SizedBox(height: 24),
-        Text(
-          'Monatsübersicht',
-          style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                fontWeight: FontWeight.bold,
-              ),
-        ),
         const SizedBox(height: 12),
+        Card(
+          clipBehavior: Clip.antiAlias,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(10, 14, 10, 10),
+            child: Column(
+              children: [
+                _WeekdayHeader(),
+                const SizedBox(height: 8),
+                _MonthGrid(
+                  visibleMonth: visibleMonth,
+                  workDays: workDays,
+                  onDatePressed: onDatePressed,
+                ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 22),
+        _CalendarSectionTitle(
+          icon: Icons.insights_outlined,
+          title: 'Monatsübersicht',
+        ),
+        const SizedBox(height: 10),
         Row(
           children: [
             Expanded(
@@ -367,62 +367,114 @@ class _CalendarContent extends StatelessWidget {
             ),
           ],
         ),
-        const SizedBox(height: 20),
+        const SizedBox(height: 18),
+        const _CalendarHint(),
+        const SizedBox(height: 18),
         const _Legend(),
       ],
     );
   }
 }
 
-class _CalendarIntroCard extends StatelessWidget {
-  const _CalendarIntroCard();
+class _CalendarMonthHeader extends StatelessWidget {
+  const _CalendarMonthHeader({
+    required this.visibleMonth,
+    required this.onPreviousMonth,
+    required this.onNextMonth,
+    required this.onTodayPressed,
+  });
+
+  final DateTime visibleMonth;
+  final VoidCallback onPreviousMonth;
+  final VoidCallback onNextMonth;
+  final VoidCallback onTodayPressed;
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final now = DateTime.now();
+    final isCurrentMonth =
+        now.year == visibleMonth.year && now.month == visibleMonth.month;
+
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(18),
+      padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
       decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.primaryContainer,
+        color: theme.colorScheme.primaryContainer.withValues(alpha: 0.42),
         borderRadius: BorderRadius.circular(22),
+        border: Border.all(
+          color: theme.colorScheme.primary.withValues(alpha: 0.14),
+        ),
       ),
       child: Row(
         children: [
-          Container(
-            width: 48,
-            height: 48,
-            decoration: BoxDecoration(
-              color: Theme.of(context).colorScheme.surface,
-              borderRadius: BorderRadius.circular(16),
-            ),
-            child: Icon(
-              Icons.calendar_today_outlined,
-              color: Theme.of(context).colorScheme.primary,
-            ),
+          IconButton(
+            tooltip: 'Vorheriger Monat',
+            onPressed: onPreviousMonth,
+            icon: const Icon(Icons.chevron_left),
           ),
-          const SizedBox(width: 14),
           Expanded(
             child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Deine Arbeitstage',
-                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                        fontWeight: FontWeight.bold,
-                      ),
+                  '${_monthName(visibleMonth.month)} ${visibleMonth.year}',
+                  textAlign: TextAlign.center,
+                  style: theme.textTheme.titleLarge?.copyWith(
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: -0.3,
+                  ),
                 ),
-                const SizedBox(height: 3),
+                const SizedBox(height: 2),
                 Text(
-                  'Alle eingetragenen Arbeitstage und Abwesenheiten auf einen Blick.',
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: Theme.of(context).colorScheme.onSurfaceVariant,
-                      ),
+                  'Tippe auf einen Tag für Details',
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
                 ),
               ],
             ),
           ),
+          IconButton(
+            tooltip: 'Nächster Monat',
+            onPressed: onNextMonth,
+            icon: const Icon(Icons.chevron_right),
+          ),
+          if (!isCurrentMonth)
+            IconButton(
+              tooltip: 'Zum aktuellen Monat',
+              onPressed: onTodayPressed,
+              icon: const Icon(Icons.today_outlined),
+            ),
         ],
       ),
+    );
+  }
+}
+
+class _CalendarHint extends StatelessWidget {
+  const _CalendarHint();
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return Row(
+      children: [
+        Icon(
+          Icons.touch_app_outlined,
+          size: 18,
+          color: theme.colorScheme.primary,
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(
+            'Ein Tag öffnet die gespeicherten Details. Leere Tage können direkt neu eingetragen werden.',
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          ),
+        ),
+      ],
     );
   }
 }
@@ -451,69 +503,6 @@ class _CalendarSectionTitle extends StatelessWidget {
           style: Theme.of(context).textTheme.titleMedium?.copyWith(
                 fontWeight: FontWeight.bold,
               ),
-        ),
-      ],
-    );
-  }
-}
-
-class _MonthHeader extends StatelessWidget {
-  const _MonthHeader({
-    required this.visibleMonth,
-    required this.onPreviousMonth,
-    required this.onNextMonth,
-    required this.onTodayPressed,
-  });
-
-  final DateTime visibleMonth;
-  final VoidCallback onPreviousMonth;
-  final VoidCallback onNextMonth;
-  final VoidCallback onTodayPressed;
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        IconButton(
-          tooltip: 'Vorheriger Monat',
-          onPressed: onPreviousMonth,
-          icon: const Icon(
-            Icons.chevron_left,
-          ),
-        ),
-        Expanded(
-          child: Column(
-            children: [
-              Text(
-                _monthName(
-                  visibleMonth.month,
-                ),
-                style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                      fontWeight: FontWeight.bold,
-                    ),
-              ),
-              Text(
-                '${visibleMonth.year}',
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: Theme.of(context)
-                          .colorScheme
-                          .onSurfaceVariant,
-                    ),
-              ),
-            ],
-          ),
-        ),
-        IconButton(
-          tooltip: 'Nächster Monat',
-          onPressed: onNextMonth,
-          icon: const Icon(
-            Icons.chevron_right,
-          ),
-        ),
-        const SizedBox(width: 4),
-        TextButton(
-          onPressed: onTodayPressed,
-          child: const Text('Heute'),
         ),
       ],
     );
@@ -632,7 +621,7 @@ class _MonthGrid extends StatelessWidget {
 
     if (dayNumber < 1 || dayNumber > daysInMonth) {
       return const SizedBox(
-        height: 62,
+        height: 68,
       );
     }
 
@@ -711,41 +700,57 @@ class _CalendarDayCell extends StatelessWidget {
 
     return Material(
       color: backgroundColor,
-      borderRadius: BorderRadius.circular(14),
+      borderRadius: BorderRadius.circular(13),
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(13),
         child: Container(
-          height: 62,
+          height: 68,
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(
-              color: borderColor,
-              width: isToday ? 2 : 0,
-            ),
+            borderRadius: BorderRadius.circular(13),
+            border: isToday
+                ? Border.all(
+                    color: borderColor,
+                    width: 2,
+                  )
+                : Border.all(
+                    color: Theme.of(context)
+                        .colorScheme
+                        .outlineVariant
+                        .withValues(alpha: 0.25),
+                  ),
           ),
           padding: const EdgeInsets.symmetric(
             vertical: 7,
-            horizontal: 4,
+            horizontal: 3,
           ),
           child: Column(
             children: [
               Text(
                 '${date.day}',
                 style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                      fontWeight: isToday
-                          ? FontWeight.bold
-                          : FontWeight.w600,
+                      fontWeight: isToday || workDay != null
+                          ? FontWeight.w800
+                          : FontWeight.w500,
                     ),
               ),
               const Spacer(),
-              if (workDay != null)
+              if (workDay != null) ...[
                 Icon(
-                  _workDayIcon(
-                    workDay!,
-                  ),
-                  size: 16,
+                  _workDayIcon(workDay!),
+                  size: 17,
                 ),
+                const SizedBox(height: 2),
+                Text(
+                  _calendarDayLabel(workDay!),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                        fontSize: 8.5,
+                        fontWeight: FontWeight.w700,
+                      ),
+                ),
+              ],
             ],
           ),
         ),
@@ -816,6 +821,30 @@ class _CalendarDayCell extends StatelessWidget {
       case WorkDayType.sick:
         return Icons.sick_outlined;
     }
+  }
+}
+
+String _calendarDayLabel(WorkDay workDay) {
+  switch (workDay.type) {
+    case WorkDayType.work:
+      if (workDay.assignmentType == WorkAssignmentType.packageDriver) {
+        return 'Paket';
+      }
+      if (workDay.assignmentType == WorkAssignmentType.mondayDelivery) {
+        return 'Montag';
+      }
+      if (workDay.districtId?.trim().isNotEmpty == true) {
+        return 'B ${workDay.districtId}';
+      }
+      return 'Arbeit';
+    case WorkDayType.free:
+      return 'Frei';
+    case WorkDayType.vacation:
+      return 'Urlaub';
+    case WorkDayType.holiday:
+      return 'Feiertag';
+    case WorkDayType.sick:
+      return 'Krank';
   }
 }
 

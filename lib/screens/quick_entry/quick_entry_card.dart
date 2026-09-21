@@ -2,9 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../models/advertising.dart';
+import '../../models/district.dart';
+import '../../models/zsp_location.dart';
 import '../../models/own_tour_entry.dart';
 import '../../models/work_day.dart';
 import '../../services/advertising_provider.dart';
+import '../../services/district_provider.dart';
+import '../../services/zsp_provider.dart';
 import '../../services/work_day_provider.dart';
 
 enum QuickEntryExternalAction {
@@ -387,6 +391,46 @@ class _QuickEntryCardState
 
     final advertisings =
         ref.read(advertisingProvider).value ?? const <Advertising>[];
+    final zspLocations =
+        ref.read(zspProvider).value ?? const <ZspLocation>[];
+    final districts =
+        ref.read(districtProvider).value ?? const <District>[];
+
+    final activeZspLocations =
+        zspLocations.where((item) => item.isActive).toList();
+
+    ZspLocation? selectedZsp;
+    final existingZspId = existing?.zspId;
+
+    if (existingZspId != null) {
+      for (final location in zspLocations) {
+        if (location.id == existingZspId && location.isActive) {
+          selectedZsp = location;
+          break;
+        }
+      }
+    }
+
+    if (selectedZsp == null) {
+      for (final location in activeZspLocations) {
+        if (location.isDefault) {
+          selectedZsp = location;
+          break;
+        }
+      }
+    }
+
+    if (selectedZsp == null && activeZspLocations.isNotEmpty) {
+      selectedZsp = activeZspLocations.first;
+    }
+
+    if (selectedZsp == null) {
+      _showMessage(
+        context,
+        'Bitte zuerst unter „ZSP & Bezirke“ einen aktiven ZSP anlegen.',
+      );
+      return;
+    }
 
     final initialDistrict =
         initialOwnTours.isNotEmpty
@@ -406,6 +450,9 @@ class _QuickEntryCardState
       useSafeArea: true,
       builder: (context) {
         return _DeliveryStartSheet(
+          initialZspId: selectedZsp!.id,
+          zspLocations: activeZspLocations,
+          districts: districts,
           initialDistrict: initialDistrict,
           initialPackages: initialPackages,
           initialPostPart:
@@ -438,6 +485,14 @@ class _QuickEntryCardState
         ? 'Post A-Teil'
         : 'Post B-Teil';
 
+    String zspName = result.zspId;
+    for (final location in zspLocations) {
+      if (location.id == result.zspId) {
+        zspName = location.displayName;
+        break;
+      }
+    }
+
     final advertisingText =
         result.hasAdvertising
             ? (result.advertising?.trim().isNotEmpty == true
@@ -449,12 +504,12 @@ class _QuickEntryCardState
       context,
       title: 'Zustellungsbeginn',
       message: existingTime == null
-          ? 'Bezirk ${result.district} · '
+          ? '$zspName · Bezirk ${result.district} · '
               '${result.packages} Pakete · '
               '$postText · '
               '$advertisingText\n'
               '${_formatTime(previewMinutes)} Uhr'
-          : 'Bezirk ${result.district} · '
+          : '$zspName · Bezirk ${result.district} · '
               '${result.packages} Pakete · '
               '$postText · '
               '$advertisingText\n\n'
@@ -502,6 +557,7 @@ class _QuickEntryCardState
       type: WorkDayType.work,
       assignmentType:
           WorkAssignmentType.ownDistrict,
+      zspId: result.zspId,
       districtId: result.district,
       districtPart: result.postPart,
       departureTime: minutes,
@@ -518,6 +574,7 @@ class _QuickEntryCardState
     final ownTour = OwnTourEntry(
       workDayId: updated.id,
       district: result.district,
+      zspId: result.zspId,
       districtPart: result.postPart,
       packageCount: result.packages,
       cancelledPackageCount: 0,
@@ -995,6 +1052,9 @@ class _QuickActionTile extends StatelessWidget {
 
 class _DeliveryStartSheet extends StatefulWidget {
   const _DeliveryStartSheet({
+    required this.initialZspId,
+    required this.zspLocations,
+    required this.districts,
     required this.initialDistrict,
     required this.initialPackages,
     required this.initialPostPart,
@@ -1003,6 +1063,9 @@ class _DeliveryStartSheet extends StatefulWidget {
     required this.advertisingNames,
   });
 
+  final String initialZspId;
+  final List<ZspLocation> zspLocations;
+  final List<District> districts;
   final String? initialDistrict;
   final int initialPackages;
   final DistrictPart? initialPostPart;
@@ -1011,28 +1074,64 @@ class _DeliveryStartSheet extends StatefulWidget {
   final List<String> advertisingNames;
 
   @override
-  State<_DeliveryStartSheet> createState() => _DeliveryStartSheetState();
+  State<_DeliveryStartSheet> createState() =>
+      _DeliveryStartSheetState();
 }
 
 class _DeliveryStartSheetState extends State<_DeliveryStartSheet> {
   static const _otherAdvertisingValue = '__other__';
-  late final TextEditingController _districtController;
+
+  late String _selectedZspId;
+  String? _selectedDistrict;
   late final TextEditingController _packageController;
   late final TextEditingController _customAdvertisingController;
   DistrictPart? _postPart;
   late bool _hasAdvertising;
   String? _selectedAdvertising;
 
+  List<District> get _availableDistricts {
+    final result = widget.districts
+        .where(
+          (item) =>
+              item.zspId == _selectedZspId &&
+              item.isActive,
+        )
+        .toList();
+
+    result.sort(
+      (a, b) => a.number.compareTo(b.number),
+    );
+
+    return result;
+  }
+
   @override
   void initState() {
     super.initState();
-    _districtController = TextEditingController(text: widget.initialDistrict ?? '');
+
+    _selectedZspId = widget.initialZspId;
+
+    final initialDistrict = widget.initialDistrict?.trim();
+    if (initialDistrict != null &&
+        initialDistrict.isNotEmpty &&
+        widget.districts.any(
+          (item) =>
+              item.zspId == _selectedZspId &&
+              item.number.toString() == initialDistrict &&
+              item.isActive,
+        )) {
+      _selectedDistrict = initialDistrict;
+    }
+
     _packageController = TextEditingController(
-      text: widget.initialPackages > 0 ? widget.initialPackages.toString() : '',
+      text: widget.initialPackages > 0
+          ? widget.initialPackages.toString()
+          : '',
     );
     _customAdvertisingController = TextEditingController();
     _postPart = widget.initialPostPart;
     _hasAdvertising = widget.initialAdvertising;
+
     final name = widget.initialAdvertisingName?.trim();
     if (_hasAdvertising && name != null && name.isNotEmpty) {
       if (widget.advertisingNames.contains(name)) {
@@ -1046,7 +1145,6 @@ class _DeliveryStartSheetState extends State<_DeliveryStartSheet> {
 
   @override
   void dispose() {
-    _districtController.dispose();
     _packageController.dispose();
     _customAdvertisingController.dispose();
     super.dispose();
@@ -1055,6 +1153,8 @@ class _DeliveryStartSheetState extends State<_DeliveryStartSheet> {
   @override
   Widget build(BuildContext context) {
     final bottomInset = MediaQuery.viewInsetsOf(context).bottom;
+    final availableDistricts = _availableDistricts;
+
     return Padding(
       padding: EdgeInsets.fromLTRB(20, 8, 20, 20 + bottomInset),
       child: SingleChildScrollView(
@@ -1080,18 +1180,67 @@ class _DeliveryStartSheetState extends State<_DeliveryStartSheet> {
             ),
             const SizedBox(height: 6),
             Text(
-              'Bezirk, Paketmenge, Post und Werbung eintragen. Die Uhrzeit wird erst beim endgültigen Speichern übernommen.',
+              'Standort, Bezirk, Paketmenge, Post und Werbung eintragen. Die Uhrzeit wird erst beim endgültigen Speichern übernommen.',
               style: Theme.of(context).textTheme.bodyMedium,
             ),
             const SizedBox(height: 24),
-            TextField(
-              controller: _districtController,
-              keyboardType: TextInputType.number,
+            DropdownButtonFormField<String>(
+              initialValue: _selectedZspId,
               decoration: const InputDecoration(
                 border: OutlineInputBorder(),
-                labelText: 'Bezirk',
-                hintText: 'z. B. 19',
+                labelText: 'ZSP',
               ),
+              items: widget.zspLocations
+                  .map(
+                    (location) => DropdownMenuItem<String>(
+                      value: location.id,
+                      child: Text(
+                        location.isDefault
+                            ? '${location.displayName} (Standard)'
+                            : location.displayName,
+                      ),
+                    ),
+                  )
+                  .toList(),
+              onChanged: (value) {
+                if (value == null) {
+                  return;
+                }
+
+                setState(() {
+                  _selectedZspId = value;
+                  _selectedDistrict = null;
+                });
+              },
+            ),
+            const SizedBox(height: 16),
+            DropdownButtonFormField<String>(
+              key: ValueKey(
+                'quick-district-$_selectedZspId-$_selectedDistrict',
+              ),
+              initialValue: _selectedDistrict,
+              decoration: InputDecoration(
+                border: const OutlineInputBorder(),
+                labelText: 'Bezirk',
+                helperText: availableDistricts.isEmpty
+                    ? 'Für diesen ZSP sind keine aktiven Bezirke hinterlegt.'
+                    : 'Nur aktive Bezirke dieses ZSP werden angezeigt.',
+              ),
+              items: availableDistricts
+                  .map(
+                    (district) => DropdownMenuItem<String>(
+                      value: district.number.toString(),
+                      child: Text('Bezirk ${district.number}'),
+                    ),
+                  )
+                  .toList(),
+              onChanged: availableDistricts.isEmpty
+                  ? null
+                  : (value) {
+                      setState(() {
+                        _selectedDistrict = value;
+                      });
+                    },
             ),
             const SizedBox(height: 16),
             TextField(
@@ -1112,20 +1261,35 @@ class _DeliveryStartSheetState extends State<_DeliveryStartSheet> {
                 helperText: 'A- oder B-Teil für den gesamten Arbeitstag.',
               ),
               items: const [
-                DropdownMenuItem(value: DistrictPart.partA, child: Text('A-Teil')),
-                DropdownMenuItem(value: DistrictPart.partB, child: Text('B-Teil')),
+                DropdownMenuItem(
+                  value: DistrictPart.partA,
+                  child: Text('A-Teil'),
+                ),
+                DropdownMenuItem(
+                  value: DistrictPart.partB,
+                  child: Text('B-Teil'),
+                ),
               ],
-              onChanged: (value) => setState(() => _postPart = value),
+              onChanged: (value) {
+                setState(() {
+                  _postPart = value;
+                });
+              },
             ),
             const SizedBox(height: 10),
             SwitchListTile(
               contentPadding: EdgeInsets.zero,
               title: const Text('Werbung mitgenommen'),
-              subtitle: Text(_hasAdvertising ? 'Werbung dabei' : 'Keine Werbung'),
+              subtitle: Text(
+                _hasAdvertising
+                    ? 'Werbung dabei'
+                    : 'Keine Werbung',
+              ),
               value: _hasAdvertising,
               onChanged: (value) {
                 setState(() {
                   _hasAdvertising = value;
+
                   if (!value) {
                     _selectedAdvertising = null;
                     _customAdvertisingController.clear();
@@ -1136,7 +1300,10 @@ class _DeliveryStartSheetState extends State<_DeliveryStartSheet> {
             if (_hasAdvertising) ...[
               const SizedBox(height: 8),
               DropdownButtonFormField<String>(
-                key: ValueKey('quick-advertising-$_selectedAdvertising-${widget.advertisingNames.length}'),
+                key: ValueKey(
+                  'quick-advertising-$_selectedAdvertising-'
+                  '${widget.advertisingNames.length}',
+                ),
                 initialValue: _selectedAdvertising,
                 decoration: const InputDecoration(
                   border: OutlineInputBorder(),
@@ -1144,7 +1311,10 @@ class _DeliveryStartSheetState extends State<_DeliveryStartSheet> {
                 ),
                 items: [
                   ...widget.advertisingNames.map(
-                    (name) => DropdownMenuItem<String>(value: name, child: Text(name)),
+                    (name) => DropdownMenuItem<String>(
+                      value: name,
+                      child: Text(name),
+                    ),
                   ),
                   const DropdownMenuItem<String>(
                     value: _otherAdvertisingValue,
@@ -1154,6 +1324,7 @@ class _DeliveryStartSheetState extends State<_DeliveryStartSheet> {
                 onChanged: (value) {
                   setState(() {
                     _selectedAdvertising = value;
+
                     if (value != _otherAdvertisingValue) {
                       _customAdvertisingController.clear();
                     }
@@ -1188,28 +1359,40 @@ class _DeliveryStartSheetState extends State<_DeliveryStartSheet> {
   }
 
   void _continue() {
-    final district = _districtController.text.trim();
-    final packages = int.tryParse(_packageController.text.trim());
-    if (district.isEmpty) {
-      _showError('Bitte einen Bezirk eintragen.');
+    final district = _selectedDistrict;
+    final packages = int.tryParse(
+      _packageController.text.trim(),
+    );
+
+    if (district == null || district.isEmpty) {
+      _showError('Bitte einen Bezirk auswählen.');
       return;
     }
+
     if (packages == null || packages < 0) {
       _showError('Bitte eine gültige Paketanzahl eintragen.');
       return;
     }
-    if (_postPart != DistrictPart.partA && _postPart != DistrictPart.partB) {
+
+    if (_postPart != DistrictPart.partA &&
+        _postPart != DistrictPart.partB) {
       _showError('Bitte Post A-Teil oder B-Teil auswählen.');
       return;
     }
+
     String? advertising;
+
     if (_hasAdvertising) {
       if (_selectedAdvertising == null) {
-        _showError('Bitte wähle aus, welche Werbung du dabei hast.');
+        _showError(
+          'Bitte wähle aus, welche Werbung du dabei hast.',
+        );
         return;
       }
+
       if (_selectedAdvertising == _otherAdvertisingValue) {
         advertising = _customAdvertisingController.text.trim();
+
         if (advertising.isEmpty) {
           _showError('Bitte gib den Namen der Werbung ein.');
           return;
@@ -1218,8 +1401,10 @@ class _DeliveryStartSheetState extends State<_DeliveryStartSheet> {
         advertising = _selectedAdvertising;
       }
     }
+
     Navigator.of(context).pop(
       _DeliveryStartResult(
+        zspId: _selectedZspId,
         district: district,
         packages: packages,
         postPart: _postPart!,
@@ -1230,12 +1415,15 @@ class _DeliveryStartSheetState extends State<_DeliveryStartSheet> {
   }
 
   void _showError(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message)),
+    );
   }
 }
 
 class _DeliveryStartResult {
   const _DeliveryStartResult({
+    required this.zspId,
     required this.district,
     required this.packages,
     required this.postPart,
@@ -1243,6 +1431,7 @@ class _DeliveryStartResult {
     required this.advertising,
   });
 
+  final String zspId;
   final String district;
   final int packages;
   final DistrictPart postPart;

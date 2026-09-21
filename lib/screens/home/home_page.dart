@@ -372,7 +372,14 @@ class _TodayOverviewCard extends ConsumerWidget {
             ? data!.ownTours.map((entry) => entry.district).join(' + ')
             : workDay!.districtId;
 
-        final packages = data?.ownPackages ?? workDay!.deliveredPackageCount;
+        final packages = switch (workDay!.assignmentType) {
+          WorkAssignmentType.mondayDelivery =>
+            workDay!.mondayDeliveryPackageCount,
+          WorkAssignmentType.packageDriver =>
+            workDay!.packageDriverPackageCount,
+          WorkAssignmentType.ownDistrict =>
+            data?.ownPackages ?? workDay!.deliveredPackageCount,
+        };
         final support = data?.supportPackages ?? 0;
 
         return _HomePanel(
@@ -1065,8 +1072,17 @@ class _TodayCard extends ConsumerWidget {
             data?.ownPackages ??
             workDay!.deliveredPackageCount;
 
+        final assignmentPackages = switch (workDay!.assignmentType) {
+          WorkAssignmentType.mondayDelivery =>
+            workDay!.mondayDeliveryPackageCount,
+          WorkAssignmentType.packageDriver =>
+            workDay!.packageDriverPackageCount,
+          WorkAssignmentType.ownDistrict =>
+            ownPackages,
+        };
+
         final totalDelivered =
-            ownPackages + supportPackages;
+            assignmentPackages + supportPackages;
 
         return Card(
           child: Padding(
@@ -1183,6 +1199,19 @@ class _TodayCard extends ConsumerWidget {
                           workDay!.deliveryDurationMinutes!,
                         ),
                 ),
+
+                if (workDay!.assignmentType !=
+                    WorkAssignmentType.ownDistrict) ...[
+                  const SizedBox(height: 16),
+                  _TodayInfoRow(
+                    label: workDay!.assignmentType ==
+                            WorkAssignmentType.mondayDelivery
+                        ? 'Montagszustellung'
+                        : 'Paketfahrer',
+                    value: '$assignmentPackages Pakete',
+                    emphasize: true,
+                  ),
+                ],
 
                 if (workDay!.assignmentType ==
                     WorkAssignmentType.ownDistrict) ...[

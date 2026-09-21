@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../models/advertising.dart';
 import '../../models/district.dart';
 import '../../models/zsp_location.dart';
 import '../../models/own_tour_entry.dart';
+import '../../models/monday_delivery_entry.dart';
+import '../../models/package_driver_entry.dart';
 import '../../models/support_entry.dart';
 import '../../models/work_day.dart';
 import '../../services/advertising_provider.dart';
@@ -393,7 +394,277 @@ class _QuickEntryCardState
     );
   }
 
+
   Future<void> _startDelivery(
+    BuildContext context,
+    WidgetRef ref,
+  ) async {
+    final existing = workDay;
+
+    final initialType = switch (existing?.assignmentType) {
+      WorkAssignmentType.mondayDelivery =>
+        WorkAssignmentType.mondayDelivery,
+      WorkAssignmentType.packageDriver =>
+        WorkAssignmentType.packageDriver,
+      _ => WorkAssignmentType.ownDistrict,
+    };
+
+    final assignmentType =
+        await showModalBottomSheet<WorkAssignmentType>(
+      context: context,
+      useSafeArea: true,
+      builder: (context) {
+        return _AssignmentTypeSheet(
+          initialType: initialType,
+        );
+      },
+    );
+
+    if (assignmentType == null || !context.mounted) {
+      return;
+    }
+
+    switch (assignmentType) {
+      case WorkAssignmentType.ownDistrict:
+        await _startOwnDelivery(context, ref);
+        break;
+      case WorkAssignmentType.mondayDelivery:
+      case WorkAssignmentType.packageDriver:
+        await _startSpecialDelivery(
+          context,
+          ref,
+          assignmentType,
+        );
+        break;
+    }
+  }
+
+  Future<void> _startSpecialDelivery(
+    BuildContext context,
+    WidgetRef ref,
+    WorkAssignmentType assignmentType,
+  ) async {
+    final existing = workDay;
+
+    if (existing?.workStart == null) {
+      final continueWithoutWorkStart = await _confirm(
+        context,
+        title: 'Kein Dienstbeginn',
+        message: 'Noch kein Dienstbeginn gespeichert.\nTrotzdem starten?',
+      );
+
+      if (!continueWithoutWorkStart || !context.mounted) {
+        return;
+      }
+    }
+
+    final notifier = ref.read(workDayProvider.notifier);
+
+    final Set<String> initialDistricts;
+
+    if (assignmentType == WorkAssignmentType.mondayDelivery) {
+      final entries = existing == null
+          ? const <MondayDeliveryEntry>[]
+          : await notifier.getMondayDeliveryEntries(existing.id);
+
+      initialDistricts =
+          entries.map((entry) => entry.district).toSet();
+    } else {
+      final entries = existing == null
+          ? const <PackageDriverEntry>[]
+          : await notifier.getPackageDriverEntries(existing.id);
+
+      initialDistricts =
+          entries.map((entry) => entry.district).toSet();
+    }
+
+    if (!context.mounted) {
+      return;
+    }
+
+    final zspLocations = await ref.read(zspProvider.future);
+    final districts = await ref.read(districtProvider.future);
+
+    if (!context.mounted) {
+      return;
+    }
+
+    final activeZspLocations =
+        zspLocations.where((item) => item.isActive).toList();
+
+    ZspLocation? selectedZsp;
+    final existingZspId = existing?.zspId;
+
+    if (existingZspId != null) {
+      for (final location in activeZspLocations) {
+        if (location.id == existingZspId) {
+          selectedZsp = location;
+          break;
+        }
+      }
+    }
+
+    if (selectedZsp == null) {
+      for (final location in activeZspLocations) {
+        if (location.isDefault) {
+          selectedZsp = location;
+          break;
+        }
+      }
+    }
+
+    if (selectedZsp == null && activeZspLocations.isNotEmpty) {
+      selectedZsp = activeZspLocations.first;
+    }
+
+    if (selectedZsp == null) {
+      _showMessage(
+        context,
+        'Bitte zuerst unter „ZSP & Bezirke“ einen aktiven ZSP anlegen.',
+      );
+      return;
+    }
+
+    final initialPackages = assignmentType ==
+            WorkAssignmentType.mondayDelivery
+        ? existing?.mondayDeliveryPackageCount ?? 0
+        : existing?.packageDriverPackageCount ?? 0;
+
+    final result =
+        await showModalBottomSheet<_SpecialDeliveryStartResult>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      builder: (context) {
+        return _SpecialDeliveryStartSheet(
+          assignmentType: assignmentType,
+          initialZspId: selectedZsp!.id,
+          zspLocations: activeZspLocations,
+          districts: districts,
+          initialDistricts: initialDistricts,
+          initialPackages: initialPackages,
+        );
+      },
+    );
+
+    if (result == null || !context.mounted) {
+      return;
+    }
+
+    final previewNow = DateTime.now();
+    final previewMinutes = _minutesSinceMidnight(previewNow);
+
+    String zspName = result.zspId;
+    for (final location in zspLocations) {
+      if (location.id == result.zspId) {
+        zspName = location.displayName;
+        break;
+      }
+    }
+
+    final typeName = assignmentType ==
+            WorkAssignmentType.mondayDelivery
+        ? 'Montagszustellung'
+        : 'Paketfahrer';
+
+    final districtText =
+        result.districts.map((item) => 'Bezirk $item').join(' · ');
+
+    final confirmed = await _confirm(
+      context,
+      title: '$typeName starten',
+      message:
+          '$zspName\n$districtText\n${result.packages} Pakete gesamt\n'
+          '${_formatTime(previewMinutes)} Uhr',
+    );
+
+    if (!confirmed || !context.mounted) {
+      return;
+    }
+
+    final now = DateTime.now();
+    final minutes = _minutesSinceMidnight(now);
+    final base = _baseWorkDay(now);
+
+    if (base.workStart != null && minutes < base.workStart!) {
+      _showMessage(
+        context,
+        'Der Zustellungsbeginn kann nicht vor dem Dienstbeginn liegen.',
+      );
+      return;
+    }
+
+    if (base.deliveryEnd != null && minutes > base.deliveryEnd!) {
+      _showMessage(
+        context,
+        'Der Zustellungsbeginn kann nicht nach dem Zustellungsende liegen.',
+      );
+      return;
+    }
+
+    if (base.workEnd != null && minutes > base.workEnd!) {
+      _showMessage(
+        context,
+        'Der Zustellungsbeginn kann nicht nach dem Dienstende liegen.',
+      );
+      return;
+    }
+
+    final updated = base.copyWith(
+      type: WorkDayType.work,
+      assignmentType: assignmentType,
+      zspId: result.zspId,
+      districtPart: DistrictPart.full,
+      departureTime: minutes,
+      packageCount: 0,
+      cancelledPackageCount: 0,
+      mondayDeliveryPackageCount:
+          assignmentType == WorkAssignmentType.mondayDelivery
+              ? result.packages
+              : 0,
+      packageDriverPackageCount:
+          assignmentType == WorkAssignmentType.packageDriver
+              ? result.packages
+              : 0,
+    );
+
+    final mondayEntries =
+        assignmentType == WorkAssignmentType.mondayDelivery
+            ? result.districts
+                .map(
+                  (district) => MondayDeliveryEntry(
+                    workDayId: updated.id,
+                    district: district,
+                    zspId: result.zspId,
+                  ),
+                )
+                .toList()
+            : <MondayDeliveryEntry>[];
+
+    final packageEntries =
+        assignmentType == WorkAssignmentType.packageDriver
+            ? result.districts
+                .map(
+                  (district) => PackageDriverEntry(
+                    workDayId: updated.id,
+                    district: district,
+                    zspId: result.zspId,
+                  ),
+                )
+                .toList()
+            : <PackageDriverEntry>[];
+
+    await _saveWorkDay(
+      context,
+      ref,
+      updated,
+      ownTourEntries: const <OwnTourEntry>[],
+      mondayDeliveryEntries: mondayEntries,
+      packageDriverEntries: packageEntries,
+    );
+  }
+
+  Future<void> _startOwnDelivery(
     BuildContext context,
     WidgetRef ref,
   ) async {
@@ -425,11 +696,13 @@ class _QuickEntryCardState
     }
 
     final advertisings =
-        ref.read(advertisingProvider).value ?? const <Advertising>[];
-    final zspLocations =
-        ref.read(zspProvider).value ?? const <ZspLocation>[];
-    final districts =
-        ref.read(districtProvider).value ?? const <District>[];
+        await ref.read(advertisingProvider.future);
+    final zspLocations = await ref.read(zspProvider.future);
+    final districts = await ref.read(districtProvider.future);
+
+    if (!context.mounted) {
+      return;
+    }
 
     final activeZspLocations =
         zspLocations.where((item) => item.isActive).toList();
@@ -598,6 +871,8 @@ class _QuickEntryCardState
       departureTime: minutes,
       packageCount: result.packages,
       cancelledPackageCount: 0,
+      mondayDeliveryPackageCount: 0,
+      packageDriverPackageCount: 0,
       hasAdvertising: result.hasAdvertising,
       advertising: result.hasAdvertising
           ? result.advertising
@@ -620,6 +895,8 @@ class _QuickEntryCardState
       ref,
       updated,
       ownTourEntries: [ownTour],
+      mondayDeliveryEntries: const <MondayDeliveryEntry>[],
+      packageDriverEntries: const <PackageDriverEntry>[],
     );
   }
 
@@ -637,10 +914,12 @@ class _QuickEntryCardState
       return;
     }
 
-    final zspLocations =
-        ref.read(zspProvider).value ?? const <ZspLocation>[];
-    final districts =
-        ref.read(districtProvider).value ?? const <District>[];
+    final zspLocations = await ref.read(zspProvider.future);
+    final districts = await ref.read(districtProvider.future);
+
+    if (!context.mounted) {
+      return;
+    }
 
     final activeZspLocations =
         zspLocations.where((item) => item.isActive).toList();
@@ -905,6 +1184,8 @@ class _QuickEntryCardState
     WidgetRef ref,
     WorkDay updated, {
     List<OwnTourEntry>? ownTourEntries,
+    List<PackageDriverEntry>? packageDriverEntries,
+    List<MondayDeliveryEntry>? mondayDeliveryEntries,
   }) async {
     try {
       final notifier =
@@ -919,13 +1200,18 @@ class _QuickEntryCardState
         await notifier.saveWorkDay(
           workDay: updated,
           ownTourEntries:
-              ownTourEntries ??
-                  const <OwnTourEntry>[],
+              ownTourEntries ?? const <OwnTourEntry>[],
+          packageDriverEntries:
+              packageDriverEntries ?? const <PackageDriverEntry>[],
+          mondayDeliveryEntries:
+              mondayDeliveryEntries ?? const <MondayDeliveryEntry>[],
         );
       } else {
         await notifier.updateWorkDay(
           workDay: updated,
           ownTourEntries: ownTourEntries,
+          packageDriverEntries: packageDriverEntries,
+          mondayDeliveryEntries: mondayDeliveryEntries,
         );
       }
 
@@ -1071,6 +1357,441 @@ class _NextQuickAction {
 enum _QuickTimeAction {
   workStart,
   workEnd,
+}
+
+
+class _AssignmentTypeSheet extends StatefulWidget {
+  const _AssignmentTypeSheet({
+    required this.initialType,
+  });
+
+  final WorkAssignmentType initialType;
+
+  @override
+  State<_AssignmentTypeSheet> createState() =>
+      _AssignmentTypeSheetState();
+}
+
+class _AssignmentTypeSheetState extends State<_AssignmentTypeSheet> {
+  late WorkAssignmentType _selectedType;
+
+  @override
+  void initState() {
+    super.initState();
+    _selectedType = widget.initialType;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Center(
+            child: Container(
+              width: 40,
+              height: 4,
+              margin: const EdgeInsets.only(bottom: 20),
+              decoration: BoxDecoration(
+                color: theme.colorScheme.outlineVariant,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+          ),
+          Text(
+            'Welche Zustellung?',
+            style: theme.textTheme.headlineSmall?.copyWith(
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'Wähle aus, was du jetzt startest.',
+            style: theme.textTheme.bodyMedium?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          ),
+          const SizedBox(height: 18),
+          _AssignmentTypeOption(
+            value: WorkAssignmentType.ownDistrict,
+            selectedValue: _selectedType,
+            icon: Icons.route_outlined,
+            title: 'Eigene Zustellung',
+            subtitle: 'Bezirk, A/B-Teil, Pakete und Werbung',
+            onChanged: _select,
+          ),
+          const SizedBox(height: 10),
+          _AssignmentTypeOption(
+            value: WorkAssignmentType.mondayDelivery,
+            selectedValue: _selectedType,
+            icon: Icons.calendar_view_week_outlined,
+            title: 'Montagszustellung',
+            subtitle: 'Ein oder mehrere Bezirke, ohne A/B-Teil',
+            onChanged: _select,
+          ),
+          const SizedBox(height: 10),
+          _AssignmentTypeOption(
+            value: WorkAssignmentType.packageDriver,
+            selectedValue: _selectedType,
+            icon: Icons.local_shipping_outlined,
+            title: 'Paketfahrer',
+            subtitle: 'Ein oder mehrere Bezirke und eine Gesamtpaketmenge',
+            onChanged: _select,
+          ),
+          const SizedBox(height: 20),
+          SizedBox(
+            width: double.infinity,
+            child: FilledButton.icon(
+              onPressed: () => Navigator.of(context).pop(_selectedType),
+              icon: const Icon(Icons.arrow_forward),
+              label: const Text('Weiter'),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _select(WorkAssignmentType value) {
+    setState(() {
+      _selectedType = value;
+    });
+  }
+}
+
+class _AssignmentTypeOption extends StatelessWidget {
+  const _AssignmentTypeOption({
+    required this.value,
+    required this.selectedValue,
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.onChanged,
+  });
+
+  final WorkAssignmentType value;
+  final WorkAssignmentType selectedValue;
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final ValueChanged<WorkAssignmentType> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final selected = value == selectedValue;
+    final theme = Theme.of(context);
+
+    return InkWell(
+      onTap: () => onChanged(value),
+      borderRadius: BorderRadius.circular(16),
+      child: Ink(
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: selected
+              ? theme.colorScheme.primaryContainer.withValues(alpha: 0.7)
+              : theme.colorScheme.surfaceContainerHighest
+                  .withValues(alpha: 0.35),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: selected
+                ? theme.colorScheme.primary
+                : theme.colorScheme.outlineVariant,
+          ),
+        ),
+        child: Row(
+          children: [
+            Icon(
+              icon,
+              color: selected
+                  ? theme.colorScheme.primary
+                  : theme.colorScheme.onSurfaceVariant,
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: theme.textTheme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    subtitle,
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Icon(
+              selected
+                  ? Icons.check_circle
+                  : Icons.circle_outlined,
+              color: selected
+                  ? theme.colorScheme.primary
+                  : theme.colorScheme.onSurfaceVariant,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _SpecialDeliveryStartSheet extends StatefulWidget {
+  const _SpecialDeliveryStartSheet({
+    required this.assignmentType,
+    required this.initialZspId,
+    required this.zspLocations,
+    required this.districts,
+    required this.initialDistricts,
+    required this.initialPackages,
+  });
+
+  final WorkAssignmentType assignmentType;
+  final String initialZspId;
+  final List<ZspLocation> zspLocations;
+  final List<District> districts;
+  final Set<String> initialDistricts;
+  final int initialPackages;
+
+  @override
+  State<_SpecialDeliveryStartSheet> createState() =>
+      _SpecialDeliveryStartSheetState();
+}
+
+class _SpecialDeliveryStartSheetState
+    extends State<_SpecialDeliveryStartSheet> {
+  late String _selectedZspId;
+  late Set<String> _selectedDistricts;
+  late final TextEditingController _packageController;
+
+  List<District> get _availableDistricts {
+    final result = widget.districts
+        .where(
+          (item) =>
+              item.zspId == _selectedZspId &&
+              item.isActive,
+        )
+        .toList();
+
+    result.sort((a, b) => a.number.compareTo(b.number));
+    return result;
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _selectedZspId = widget.initialZspId;
+    _selectedDistricts = {...widget.initialDistricts};
+    _packageController = TextEditingController(
+      text: widget.initialPackages > 0
+          ? widget.initialPackages.toString()
+          : '',
+    );
+
+    final valid = widget.districts
+        .where(
+          (item) =>
+              item.zspId == _selectedZspId &&
+              item.isActive,
+        )
+        .map((item) => item.number.toString())
+        .toSet();
+
+    _selectedDistricts =
+        _selectedDistricts.where(valid.contains).toSet();
+  }
+
+  @override
+  void dispose() {
+    _packageController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final bottomInset = MediaQuery.viewInsetsOf(context).bottom;
+    final availableDistricts = _availableDistricts;
+    final isMonday =
+        widget.assignmentType == WorkAssignmentType.mondayDelivery;
+
+    return Padding(
+      padding: EdgeInsets.fromLTRB(20, 8, 20, 20 + bottomInset),
+      child: SingleChildScrollView(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Center(
+              child: Container(
+                width: 40,
+                height: 4,
+                margin: const EdgeInsets.only(bottom: 20),
+                decoration: BoxDecoration(
+                  color: Theme.of(context).colorScheme.outlineVariant,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+            ),
+            Text(
+              isMonday
+                  ? 'Montagszustellung starten'
+                  : 'Paketfahrer starten',
+              style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              isMonday
+                  ? 'Wähle alle Bezirke der Montagszustellung und trage die gesamte Paketmenge ein. Ein A-/B-Teil wird hier nicht verwendet.'
+                  : 'Wähle alle Bezirke und trage die gesamte Paketmenge einmal ein.',
+              style: Theme.of(context).textTheme.bodyMedium,
+            ),
+            const SizedBox(height: 24),
+            DropdownButtonFormField<String>(
+              initialValue: _selectedZspId,
+              decoration: const InputDecoration(
+                border: OutlineInputBorder(),
+                labelText: 'ZSP',
+              ),
+              items: widget.zspLocations
+                  .map(
+                    (location) => DropdownMenuItem<String>(
+                      value: location.id,
+                      child: Text(
+                        location.isDefault
+                            ? '${location.displayName} (Standard)'
+                            : location.displayName,
+                      ),
+                    ),
+                  )
+                  .toList(),
+              onChanged: (value) {
+                if (value == null) {
+                  return;
+                }
+
+                setState(() {
+                  _selectedZspId = value;
+                  _selectedDistricts.clear();
+                });
+              },
+            ),
+            const SizedBox(height: 18),
+            Text(
+              'Bezirke',
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
+            ),
+            const SizedBox(height: 8),
+            if (availableDistricts.isEmpty)
+              Text(
+                'Für diesen ZSP sind keine aktiven Bezirke hinterlegt.',
+                style: Theme.of(context).textTheme.bodyMedium,
+              )
+            else
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: availableDistricts.map((district) {
+                  final value = district.number.toString();
+                  return FilterChip(
+                    label: Text('Bezirk ${district.number}'),
+                    selected: _selectedDistricts.contains(value),
+                    onSelected: (selected) {
+                      setState(() {
+                        if (selected) {
+                          _selectedDistricts.add(value);
+                        } else {
+                          _selectedDistricts.remove(value);
+                        }
+                      });
+                    },
+                  );
+                }).toList(),
+              ),
+            const SizedBox(height: 18),
+            TextField(
+              controller: _packageController,
+              keyboardType: TextInputType.number,
+              decoration: const InputDecoration(
+                border: OutlineInputBorder(),
+                labelText: 'Pakete gesamt',
+                hintText: 'z. B. 180',
+                helperText:
+                    'Eine gemeinsame Gesamtmenge für alle ausgewählten Bezirke.',
+              ),
+            ),
+            const SizedBox(height: 20),
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton.icon(
+                onPressed: _continue,
+                icon: const Icon(Icons.arrow_forward),
+                label: const Text('Weiter zur Bestätigung'),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _continue() {
+    if (_selectedDistricts.isEmpty) {
+      _showError('Bitte mindestens einen Bezirk auswählen.');
+      return;
+    }
+
+    final packages = int.tryParse(_packageController.text.trim());
+
+    if (packages == null || packages <= 0) {
+      _showError('Bitte eine gültige Paketanzahl eintragen.');
+      return;
+    }
+
+    final districts = _selectedDistricts.toList()
+      ..sort(
+        (a, b) =>
+            (int.tryParse(a) ?? 0).compareTo(int.tryParse(b) ?? 0),
+      );
+
+    Navigator.of(context).pop(
+      _SpecialDeliveryStartResult(
+        zspId: _selectedZspId,
+        districts: districts,
+        packages: packages,
+      ),
+    );
+  }
+
+  void _showError(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message)),
+    );
+  }
+}
+
+class _SpecialDeliveryStartResult {
+  const _SpecialDeliveryStartResult({
+    required this.zspId,
+    required this.districts,
+    required this.packages,
+  });
+
+  final String zspId;
+  final List<String> districts;
+  final int packages;
 }
 
 class _DeliveryStartSheet extends StatefulWidget {

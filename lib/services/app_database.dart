@@ -59,8 +59,8 @@ class AppDatabase {
     await _createWorkTimeSettingsTable(db);
     await _createAdvertisingTable(db);
 
-    await _insertInitialZsp(db);
-    await _insertInitialDistricts(db);
+    // Neue Installationen starten ohne standortspezifische Beispieldaten.
+    // Bestehende Datenbanken werden durch diese Änderung nicht verändert.
   }
 
   Future<void> _onUpgrade(
@@ -499,39 +499,6 @@ class AppDatabase {
         ''',
       );
     });
-  }
-
-  Future<void> _insertInitialZsp(Database db) async {
-    await db.insert(
-      'zsp_locations',
-      {
-        'id': ZspLocation.werneckId,
-        'name': 'ZSP Werneck',
-        'is_default': 1,
-        'is_active': 1,
-      },
-      conflictAlgorithm: ConflictAlgorithm.ignore,
-    );
-  }
-
-  Future<void> _insertInitialDistricts(Database db) async {
-    final batch = db.batch();
-
-    for (var number = 1; number <= 25; number++) {
-      batch.insert(
-        'districts',
-        {
-          'zsp_id': ZspLocation.werneckId,
-          'number': number,
-          'is_active': 1,
-          'can_drive_safely': 0,
-          'note': null,
-        },
-        conflictAlgorithm: ConflictAlgorithm.ignore,
-      );
-    }
-
-    await batch.commit(noResult: true);
   }
 
   Future<List<ZspLocation>> getZspLocations() async {

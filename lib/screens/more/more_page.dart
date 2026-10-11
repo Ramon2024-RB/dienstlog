@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../districts/districts_page.dart';
+import '../onboarding/onboarding_page.dart';
 import '../settings/advertising_page.dart';
 import '../settings/backup_page.dart';
 import '../settings/settings_page.dart';
@@ -64,6 +65,23 @@ class MorePage extends StatelessWidget {
                   Navigator.of(context).push(
                     MaterialPageRoute<void>(
                       builder: (context) => const WorkTimesPage(),
+                    ),
+                  );
+                },
+              ),
+            ],
+          ),
+          const SizedBox(height: 24),
+          _SettingsGroup(
+            children: [
+              _MoreTile(
+                icon: Icons.help_outline,
+                title: 'Hilfe & Einführung',
+                subtitle: 'TourLog kennenlernen und Einrichtung ansehen',
+                onTap: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (_) => const OnboardingPage(helpMode: true),
                     ),
                   );
                 },

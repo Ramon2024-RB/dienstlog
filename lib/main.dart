@@ -1,11 +1,16 @@
 import 'dart:async';
 
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:path/path.dart' as path;
+import 'package:sqflite/sqflite.dart';
+
 import 'package:app_links/app_links.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'screens/calendar/calendar_page.dart';
+import 'screens/onboarding/onboarding_page.dart';
 import 'screens/home/home_page.dart';
 import 'screens/more/more_page.dart';
 import 'screens/quick_entry/quick_entry_card.dart';
@@ -70,7 +75,69 @@ class TourLogApp extends StatelessWidget {
         ),
       ),
       themeMode: ThemeMode.system,
-      home: const MainNavigationPage(),
+      home: const TourLogStartupGate(),
+    );
+  }
+}
+
+class TourLogStartupGate extends StatefulWidget {
+  const TourLogStartupGate({super.key});
+
+  @override
+  State<TourLogStartupGate> createState() => _TourLogStartupGateState();
+}
+
+class _TourLogStartupGateState extends State<TourLogStartupGate> {
+  late final Future<bool> _needsSetup = _checkSetup();
+
+  Future<bool> _checkSetup() async {
+    final prefs = await SharedPreferences.getInstance();
+    if (prefs.getBool('tourlog_onboarding_completed_v1') == true) {
+      return false;
+    }
+    // Eine vorhandene Datenbank gehört zu einer bestehenden Installation.
+    // Keine Daten überschreiben und kein Onboarding erzwingen.
+    final dbPath = path.join(await getDatabasesPath(), 'dienstlog.db');
+    if (await databaseExists(dbPath)) {
+      await prefs.setBool('tourlog_onboarding_completed_v1', true);
+      return false;
+    }
+    return true;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<bool>(
+      future: _needsSetup,
+      builder: (context, snapshot) {
+        if (snapshot.hasError) {
+          return Scaffold(
+            body: Center(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Text('TourLog konnte die Einrichtung nicht prüfen: ${snapshot.error}'),
+              ),
+            ),
+          );
+        }
+        if (!snapshot.hasData) {
+          return const Scaffold(body: Center(child: CircularProgressIndicator()));
+        }
+        if (snapshot.data!) {
+          return OnboardingPage(
+            onFinish: () async {
+              final prefs = await SharedPreferences.getInstance();
+              await prefs.setBool('tourlog_onboarding_completed_v1', true);
+              if (context.mounted) {
+                Navigator.of(context).pushReplacement(
+                  MaterialPageRoute<void>(builder: (_) => const MainNavigationPage()),
+                );
+              }
+            },
+          );
+        }
+        return const MainNavigationPage();
+      },
     );
   }
 }

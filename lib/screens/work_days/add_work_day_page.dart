@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../models/advertising.dart';
 import '../../models/district.dart';
@@ -54,6 +55,7 @@ class _AddWorkDayPageState extends ConsumerState<AddWorkDayPage> {
   TimeOfDay? _workEnd;
 
   int _breakMinutes = 0;
+  bool _automaticBreakApplied = false;
 
   final TextEditingController _advertisingController =
       TextEditingController();
@@ -188,7 +190,19 @@ class _AddWorkDayPageState extends ConsumerState<AddWorkDayPage> {
       _ownTourDrafts.add(
         _OwnTourDraft(),
       );
+      _loadAutomaticBreak();
     }
+  }
+
+  Future<void> _loadAutomaticBreak() async {
+    final prefs = await SharedPreferences.getInstance();
+    final enabled = prefs.getBool('tourlog_auto_break_enabled_v1') ?? true;
+    final minutes = prefs.getInt('tourlog_auto_break_minutes_v1') ?? 30;
+    if (!mounted || !enabled || _automaticBreakApplied) return;
+    setState(() {
+      _breakMinutes = minutes;
+      _automaticBreakApplied = true;
+    });
   }
 
   @override
@@ -586,8 +600,11 @@ class _AddWorkDayPageState extends ConsumerState<AddWorkDayPage> {
                 DropdownButtonFormField<int>(
                   initialValue:
                       _breakMinutes,
-                  decoration: const InputDecoration(
+                  decoration: InputDecoration(
                     labelText: 'Pause',
+                    helperText: widget.existingWorkDay == null
+                        ? 'Standardpause vorausgewählt – jederzeit änderbar'
+                        : 'Gespeicherte Pause – jederzeit änderbar',
                     border: OutlineInputBorder(),
                   ),
                   items: const [
@@ -628,8 +645,8 @@ class _AddWorkDayPageState extends ConsumerState<AddWorkDayPage> {
                     }
 
                     setState(() {
-                      _breakMinutes =
-                          value;
+                      _breakMinutes = value;
+                      _automaticBreakApplied = true;
                     });
                   },
                 ),

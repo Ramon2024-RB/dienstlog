@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../services/app_database.dart';
 
@@ -14,6 +15,8 @@ class _WorkTimesPageState extends State<WorkTimesPage> {
 
   bool _isLoading = true;
   bool _isSaving = false;
+  bool _autoBreakEnabled = true;
+  int _autoBreakMinutes = 30;
 
   final Map<int, _WorkTimeSetting> _settings = {
     for (var day = DateTime.monday; day <= DateTime.saturday; day++)
@@ -28,12 +31,15 @@ class _WorkTimesPageState extends State<WorkTimesPage> {
 
   Future<void> _loadSettings() async {
     final storedSettings = await _database.getWorkTimeSettings();
+    final prefs = await SharedPreferences.getInstance();
 
     if (!mounted) {
       return;
     }
 
     setState(() {
+      _autoBreakEnabled = prefs.getBool('tourlog_auto_break_enabled_v1') ?? true;
+      _autoBreakMinutes = prefs.getInt('tourlog_auto_break_minutes_v1') ?? 30;
       for (var day = DateTime.monday; day <= DateTime.saturday; day++) {
         final stored = storedSettings[day];
 
@@ -169,6 +175,9 @@ class _WorkTimesPageState extends State<WorkTimesPage> {
     });
 
     try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool('tourlog_auto_break_enabled_v1', _autoBreakEnabled);
+      await prefs.setInt('tourlog_auto_break_minutes_v1', _autoBreakMinutes);
       for (var day = DateTime.monday; day <= DateTime.saturday; day++) {
         final setting = _settings[day] ?? const _WorkTimeSetting();
 
@@ -281,6 +290,43 @@ class _WorkTimesPageState extends State<WorkTimesPage> {
                         ),
                       ),
                     ],
+                  ),
+                ),
+                const SizedBox(height: 20),
+                Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        SwitchListTile.adaptive(
+                          contentPadding: EdgeInsets.zero,
+                          title: const Text('Pause automatisch übernehmen'),
+                          subtitle: const Text('Für neue Arbeitstage. Bereits gespeicherte Pausen bleiben unverändert.'),
+                          value: _autoBreakEnabled,
+                          onChanged: (value) => setState(() => _autoBreakEnabled = value),
+                        ),
+                        if (_autoBreakEnabled)
+                          DropdownButtonFormField<int>(
+                            initialValue: _autoBreakMinutes,
+                            decoration: const InputDecoration(
+                              labelText: 'Standardpause',
+                              border: OutlineInputBorder(),
+                            ),
+                            items: const [0, 15, 20, 30, 45, 60]
+                                .map((m) => DropdownMenuItem<int>(
+                                      value: m,
+                                      child: Text(m == 0 ? 'Keine Pause' : '$m Minuten'),
+                                    ))
+                                .toList(),
+                            onChanged: (value) {
+                              if (value != null) setState(() => _autoBreakMinutes = value);
+                            },
+                          ),
+                        const SizedBox(height: 8),
+                        const Text('Die Vorgabe wird bei neuen Einträgen vorausgewählt. Du kannst sie für jeden Tag nachträglich ändern.'),
+                      ],
+                    ),
                   ),
                 ),
                 const SizedBox(height: 24),

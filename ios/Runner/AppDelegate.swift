@@ -56,6 +56,12 @@ import WidgetKit
       case "ackPendingWorkStart":
         self.ackPendingWorkStart(call: call, result: result)
 
+      case "getPendingWidgetActions":
+        self.getPendingWidgetActions(result: result)
+
+      case "ackPendingWidgetAction":
+        self.ackPendingWidgetAction(call: call, result: result)
+
       case "clearWidget":
         self.clearWidget(
           result: result
@@ -92,6 +98,38 @@ import WidgetKit
       return
     }
     // Nur genau die Buchung entfernen, die Flutter tatsaechlich verarbeitet hat.
+    if let current = defaults.object(forKey: key) as? NSNumber,
+       current.int64Value == timestamp.int64Value {
+      defaults.removeObject(forKey: key)
+    }
+    result(nil)
+  }
+
+  private func getPendingWidgetActions(result: @escaping FlutterResult) {
+    guard let defaults = UserDefaults(suiteName: appGroupName) else {
+      result(FlutterError(code: "APP_GROUP_UNAVAILABLE", message: "App Group fehlt.", details: nil))
+      return
+    }
+    let prefixes = ["tourlog.pending.deliveryEnd.", "tourlog.pending.workEnd."]
+    let keys = defaults.dictionaryRepresentation().keys.filter { key in
+      prefixes.contains { key.hasPrefix($0) }
+    }.sorted()
+    let items: [[String: Any]] = keys.compactMap { key in
+      guard let number = defaults.object(forKey: key) as? NSNumber else { return nil }
+      return ["key": key, "timestamp": number.int64Value]
+    }
+    result(items)
+  }
+
+  private func ackPendingWidgetAction(call: FlutterMethodCall, result: @escaping FlutterResult) {
+    guard let defaults = UserDefaults(suiteName: appGroupName),
+          let args = call.arguments as? [String: Any],
+          let key = args["key"] as? String,
+          let timestamp = args["timestamp"] as? NSNumber,
+          (key.hasPrefix("tourlog.pending.deliveryEnd.") || key.hasPrefix("tourlog.pending.workEnd.")) else {
+      result(FlutterError(code: "INVALID_ACK", message: "Ungueltige Bestaetigung.", details: nil))
+      return
+    }
     if let current = defaults.object(forKey: key) as? NSNumber,
        current.int64Value == timestamp.int64Value {
       defaults.removeObject(forKey: key)
@@ -143,18 +181,26 @@ import WidgetKit
       defaults: defaults
     )
 
+    let currentDay = arguments["date"] as? String ?? ""
+    let hasPendingDeliveryEnd = defaults.object(forKey: "tourlog.pending.deliveryEnd.\(currentDay)") != nil
+    let hasPendingWorkEnd = defaults.object(forKey: "tourlog.pending.workEnd.\(currentDay)") != nil
+
+    if !hasPendingDeliveryEnd {
     setOptionalString(
       arguments["deliveryEnd"],
       key: "deliveryEnd",
       defaults: defaults
     )
 
+    }
+    if !hasPendingWorkEnd {
     setOptionalString(
       arguments["workEnd"],
       key: "workEnd",
       defaults: defaults
     )
 
+    }
     if let date = arguments["date"] as? String {
       defaults.set(
         date,

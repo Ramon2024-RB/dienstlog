@@ -225,12 +225,8 @@ struct TourLogWidgetEntryView: View {
 
             HStack(spacing: 8) {
 
-                Link(
-                    destination: URL(
-                        string:
-                            "tourlog://quick/delivery-end"
-                    )!
-                ) {
+                if #available(iOS 17.0, *) {
+                Button(intent: TourLogDeliveryEndIntent()) {
                     TourLogAction(
                         icon: "shippingbox.fill",
                         title: "Ende",
@@ -238,13 +234,19 @@ struct TourLogWidgetEntryView: View {
                     )
                 }
                 .buttonStyle(.plain)
+                } else {
+                Link(destination: URL(string: "tourlog://quick/delivery-end")!) {
+                    TourLogAction(
+                        icon: "shippingbox.fill",
+                        title: "Ende",
+                        time: entry.deliveryEnd
+                    )
+                }
+                .buttonStyle(.plain)
+                }
 
-                Link(
-                    destination: URL(
-                        string:
-                            "tourlog://quick/work-end"
-                    )!
-                ) {
+                if #available(iOS 17.0, *) {
+                Button(intent: TourLogWorkEndIntent()) {
                     TourLogAction(
                         icon: "flag.checkered",
                         title: "Feierabend",
@@ -252,6 +254,16 @@ struct TourLogWidgetEntryView: View {
                     )
                 }
                 .buttonStyle(.plain)
+                } else {
+                Link(destination: URL(string: "tourlog://quick/work-end")!) {
+                    TourLogAction(
+                        icon: "flag.checkered",
+                        title: "Feierabend",
+                        time: entry.workEnd
+                    )
+                }
+                .buttonStyle(.plain)
+                }
             }
         }
         .padding()

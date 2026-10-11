@@ -23,6 +23,7 @@ class WorkDayNotifier extends AsyncNotifier<List<WorkDay>> {
   @override
   Future<List<WorkDay>> build() async {
     await _importPendingWidgetStarts();
+    await _importPendingWidgetEnds();
     final workDays = await _database.getWorkDays();
     await _syncTodayWithWidget();
     return workDays;
@@ -32,6 +33,7 @@ class WorkDayNotifier extends AsyncNotifier<List<WorkDay>> {
     state = const AsyncLoading();
     state = await AsyncValue.guard(() async {
       await _importPendingWidgetStarts();
+    await _importPendingWidgetEnds();
       return _database.getWorkDays();
     });
     await _syncTodayWithWidget();
@@ -282,6 +284,83 @@ class WorkDayNotifier extends AsyncNotifier<List<WorkDay>> {
         return;
       } catch (_) {
         // Bei DB-Fehler bleibt die Buchung fuer einen spaeteren Versuch erhalten.
+        return;
+      }
+    }
+  }
+
+  // Übernimmt vorgemerkte Endzeiten in zeitlicher Reihenfolge.
+  // Vorhandene Werte werden niemals überschrieben.
+  Future<void> _importPendingWidgetEnds() async {
+    List<dynamic> pending;
+    try {
+      pending = await _widgetChannel.invokeMethod<List<dynamic>>(
+            'getPendingWidgetActions',
+          ) ?? const [];
+    } on MissingPluginException {
+      return;
+    } on PlatformException {
+      return;
+    }
+
+    final entries = <({String key, int timestamp, String kind})>[];
+    for (final raw in pending) {
+      if (raw is! Map) continue;
+      final key = raw['key'];
+      final timestamp = raw['timestamp'];
+      if (key is! String || timestamp is! int) continue;
+      final kind = key.startsWith('tourlog.pending.deliveryEnd.')
+          ? 'deliveryEnd'
+          : key.startsWith('tourlog.pending.workEnd.')
+              ? 'workEnd'
+              : null;
+      if (kind == null) continue;
+      final instant = DateTime.fromMillisecondsSinceEpoch(timestamp);
+      final dateText = _formatDate(DateTime(instant.year, instant.month, instant.day));
+      if (key != 'tourlog.pending.$kind.$dateText') continue;
+      entries.add((key: key, timestamp: timestamp, kind: kind));
+    }
+    entries.sort((a, b) => a.timestamp.compareTo(b.timestamp));
+
+    for (final entry in entries) {
+      final instant = DateTime.fromMillisecondsSinceEpoch(entry.timestamp);
+      final date = DateTime(instant.year, instant.month, instant.day);
+      final minutes = instant.hour * 60 + instant.minute;
+      try {
+        final existing = await _database.getWorkDayByDate(date);
+        if (existing == null || !existing.isWorkDay) {
+          // Ohne Arbeitstag keine Endzeit anlegen: für spätere Prüfung behalten.
+          continue;
+        }
+        if (entry.kind == 'deliveryEnd') {
+          if (existing.deliveryEnd == null) {
+            final start = existing.departureTime;
+            if (start == null || minutes < start || existing.workEnd != null && minutes > existing.workEnd!) {
+              continue;
+            }
+            await _database.updateWorkDay(existing.copyWith(deliveryEnd: minutes));
+          }
+        } else {
+          if (existing.workEnd == null) {
+            final start = existing.workStart;
+            if (start == null || minutes < start ||
+                existing.departureTime != null && existing.deliveryEnd == null ||
+                existing.deliveryEnd != null && minutes < existing.deliveryEnd!) {
+              continue;
+            }
+            await _database.updateWorkDay(existing.copyWith(workEnd: minutes));
+          }
+        }
+        await _widgetChannel.invokeMethod<void>('ackPendingWidgetAction', {
+          'key': entry.key,
+          'timestamp': entry.timestamp,
+        });
+      } on MissingPluginException {
+        return;
+      } on PlatformException {
+        return;
+      } catch (_) {
+        // Buchung bleibt für erneuten Import erhalten.
         return;
       }
     }

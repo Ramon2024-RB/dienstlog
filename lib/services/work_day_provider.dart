@@ -22,6 +22,7 @@ class WorkDayNotifier extends AsyncNotifier<List<WorkDay>> {
 
   @override
   Future<List<WorkDay>> build() async {
+    await _importPendingWidgetStarts();
     final workDays = await _database.getWorkDays();
     await _syncTodayWithWidget();
     return workDays;
@@ -29,9 +30,10 @@ class WorkDayNotifier extends AsyncNotifier<List<WorkDay>> {
 
   Future<void> refresh() async {
     state = const AsyncLoading();
-    state = await AsyncValue.guard(
-      () => _database.getWorkDays(),
-    );
+    state = await AsyncValue.guard(() async {
+      await _importPendingWidgetStarts();
+      return _database.getWorkDays();
+    });
     await _syncTodayWithWidget();
   }
 
@@ -220,6 +222,68 @@ class WorkDayNotifier extends AsyncNotifier<List<WorkDay>> {
     } catch (error, stackTrace) {
       state = previousState;
       Error.throwWithStackTrace(error, stackTrace);
+    }
+  }
+
+  // Widget-Buchungen werden beim Laden der App in SQLite uebernommen.
+  // Eine bereits vorhandene Dienstbeginn-Uhrzeit wird niemals ueberschrieben.
+  Future<void> _importPendingWidgetStarts() async {
+    List<dynamic> pending;
+    try {
+      pending = await _widgetChannel.invokeMethod<List<dynamic>>(
+            'getPendingWorkStart',
+          ) ??
+          const [];
+    } on MissingPluginException {
+      return;
+    } on PlatformException {
+      return;
+    }
+
+    for (final raw in pending) {
+      if (raw is! Map) continue;
+      final key = raw['key'];
+      final timestamp = raw['timestamp'];
+      if (key is! String || timestamp is! int) continue;
+      final instant = DateTime.fromMillisecondsSinceEpoch(timestamp);
+      final date = DateTime(instant.year, instant.month, instant.day);
+      final dateText =
+          '${date.year.toString().padLeft(4, '0')}-'
+          '${date.month.toString().padLeft(2, '0')}-'
+          '${date.day.toString().padLeft(2, '0')}';
+      if (key != 'tourlog.pending.workStart.$dateText') continue;
+      final minutes = instant.hour * 60 + instant.minute;
+
+      try {
+        final existing = await _database.getWorkDayByDate(date);
+        if (existing == null) {
+          await _database.insertWorkDay(
+            WorkDay(
+              id: 'workday_${date.year}_${date.month.toString().padLeft(2, '0')}_${date.day.toString().padLeft(2, '0')}',
+              date: date,
+              type: WorkDayType.work,
+              workStart: minutes,
+            ),
+          );
+        } else if (existing.isWorkDay && existing.workStart == null &&
+            (existing.departureTime == null ||
+                minutes <= existing.departureTime!)) {
+          await _database.updateWorkDay(existing.copyWith(workStart: minutes));
+        }
+        // Bei Konflikten vorhandene Daten bewahren und den Widget-Eintrag
+        // als verarbeitet bestaetigen, statt den Arbeitstag zu veraendern.
+        await _widgetChannel.invokeMethod<void>('ackPendingWorkStart', {
+          'key': key,
+          'timestamp': timestamp,
+        });
+      } on MissingPluginException {
+        return;
+      } on PlatformException {
+        return;
+      } catch (_) {
+        // Bei DB-Fehler bleibt die Buchung fuer einen spaeteren Versuch erhalten.
+        return;
+      }
     }
   }
 

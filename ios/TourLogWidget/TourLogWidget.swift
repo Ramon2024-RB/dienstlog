@@ -7,6 +7,7 @@
 
 import WidgetKit
 import SwiftUI
+import AppIntents
 
 struct TourLogEntry: TimelineEntry {
     let date: Date
@@ -183,19 +184,29 @@ struct TourLogWidgetEntryView: View {
 
             HStack(spacing: 8) {
 
-                Link(
-                    destination: URL(
-                        string:
-                            "tourlog://quick/work-start"
-                    )!
-                ) {
-                    TourLogAction(
-                        icon: "clock.fill",
-                        title: "Dienst",
-                        time: entry.workStart
-                    )
+                if #available(iOS 17.0, *) {
+                    Button(intent: TourLogWorkStartIntent()) {
+                        TourLogAction(
+                            icon: "clock.fill",
+                            title: "Dienst",
+                            time: entry.workStart
+                        )
+                    }
+                    .buttonStyle(.plain)
+                } else {
+                    Link(
+                        destination: URL(
+                            string: "tourlog://quick/work-start"
+                        )!
+                    ) {
+                        TourLogAction(
+                            icon: "clock.fill",
+                            title: "Dienst",
+                            time: entry.workStart
+                        )
+                    }
+                    .buttonStyle(.plain)
                 }
-                .buttonStyle(.plain)
 
                 Link(
                     destination: URL(

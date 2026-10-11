@@ -50,6 +50,12 @@ import WidgetKit
           result: result
         )
 
+      case "getPendingWorkStart":
+        self.getPendingWorkStart(result: result)
+
+      case "ackPendingWorkStart":
+        self.ackPendingWorkStart(call: call, result: result)
+
       case "clearWidget":
         self.clearWidget(
           result: result
@@ -59,6 +65,38 @@ import WidgetKit
         result(FlutterMethodNotImplemented)
       }
     }
+  }
+
+  // Eine Buchung erst nach erfolgreicher SQLite-Uebernahme bestaetigen.
+  private func getPendingWorkStart(result: @escaping FlutterResult) {
+    guard let defaults = UserDefaults(suiteName: appGroupName) else {
+      result(FlutterError(code: "APP_GROUP_UNAVAILABLE", message: "App Group fehlt.", details: nil))
+      return
+    }
+    let prefix = "tourlog.pending.workStart."
+    let keys = defaults.dictionaryRepresentation().keys.filter { $0.hasPrefix(prefix) }.sorted()
+    let items: [[String: Any]] = keys.compactMap { key in
+      guard let number = defaults.object(forKey: key) as? NSNumber else { return nil }
+      return ["key": key, "timestamp": number.int64Value]
+    }
+    result(items)
+  }
+
+  private func ackPendingWorkStart(call: FlutterMethodCall, result: @escaping FlutterResult) {
+    guard let defaults = UserDefaults(suiteName: appGroupName),
+          let args = call.arguments as? [String: Any],
+          let key = args["key"] as? String,
+          let timestamp = args["timestamp"] as? NSNumber,
+          key.hasPrefix("tourlog.pending.workStart.") else {
+      result(FlutterError(code: "INVALID_ACK", message: "Ungueltige Bestaetigung.", details: nil))
+      return
+    }
+    // Nur genau die Buchung entfernen, die Flutter tatsaechlich verarbeitet hat.
+    if let current = defaults.object(forKey: key) as? NSNumber,
+       current.int64Value == timestamp.int64Value {
+      defaults.removeObject(forKey: key)
+    }
+    result(nil)
   }
 
   private func updateWidget(

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../districts/districts_page.dart';
 import '../onboarding/onboarding_page.dart';
@@ -9,6 +10,56 @@ import '../settings/work_times_page.dart';
 
 class MorePage extends StatelessWidget {
   const MorePage({super.key});
+
+  static final Uri _supportEmail = Uri(
+    scheme: 'mailto',
+    path: 'logworks.support@gmail.com',
+    query: _encodeQueryParameters({
+      'subject': 'TourLog – Supportanfrage',
+      'body': 'Hallo LogWorks-Team,\n\n'
+          'Ich habe eine Frage oder ein Problem mit TourLog:\n\n'
+          '[Bitte beschreibe dein Anliegen hier.]\n\n'
+          'Vielen Dank!\n',
+    }),
+  );
+
+  static String _encodeQueryParameters(Map<String, String> params) => params.entries
+      .map((entry) =>
+          '${Uri.encodeComponent(entry.key)}=${Uri.encodeComponent(entry.value)}')
+      .join('&');
+
+  Future<void> _contactSupport(BuildContext context) async {
+    try {
+      final launched = await launchUrl(
+        _supportEmail,
+        mode: LaunchMode.externalApplication,
+      );
+      if (!launched && context.mounted) {
+        _showEmailFallback(context);
+      }
+    } catch (_) {
+      if (context.mounted) _showEmailFallback(context);
+    }
+  }
+
+  void _showEmailFallback(BuildContext context) {
+    showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Keine E-Mail-App verfügbar'),
+        content: const SelectableText(
+          'Bitte richte eine E-Mail-App auf deinem iPhone ein oder schreibe direkt an:\n\n'
+          'logworks.support@gmail.com',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('Schließen'),
+          ),
+        ],
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -72,6 +123,11 @@ class MorePage extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 24),
+          const _SectionTitle(
+            icon: Icons.help_outline,
+            title: 'Hilfe & Support',
+          ),
+          const SizedBox(height: 10),
           _SettingsGroup(
             children: [
               _MoreTile(
@@ -86,7 +142,24 @@ class MorePage extends StatelessWidget {
                   );
                 },
               ),
+              const Divider(height: 1),
+              _MoreTile(
+                icon: Icons.mail_outline,
+                title: 'Kontakt zum Entwickler',
+                subtitle: 'Fragen, Fehler melden oder Feedback senden',
+                onTap: () => _contactSupport(context),
+              ),
             ],
+          ),
+          const SizedBox(height: 10),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8),
+            child: Text(
+              'Deine Arbeitsdaten und Backups werden nicht automatisch mitgesendet.',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
+            ),
           ),
           const SizedBox(height: 24),
           const _SectionTitle(

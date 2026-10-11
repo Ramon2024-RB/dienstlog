@@ -119,7 +119,7 @@ class _MainNavigationPageState
   }
 
   void _handleDeepLink(Uri uri) {
-    if (uri.scheme != 'tourlog') {
+    if (uri.scheme != 'tourlogapp') {
       return;
     }
 

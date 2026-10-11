@@ -28,10 +28,10 @@
 			<key>CFBundleTypeRole</key>
 			<string>Editor</string>
 			<key>CFBundleURLName</key>
-			<string>com.example.dienstlog</string>
+			<string>com.logworks.tourlog</string>
 			<key>CFBundleURLSchemes</key>
 			<array>
-				<string>tourlog</string>
+				<string>tourlogapp</string>
 			</array>
 		</dict>
 	</array>

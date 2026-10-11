@@ -30,7 +30,7 @@ struct TourLogWorkEndIntent: AppIntent {
 
 private enum TourLogPendingAction {
     static func record(kind: String) throws {
-        guard let defaults = UserDefaults(suiteName: "group.com.example.dienstlog") else {
+        guard let defaults = UserDefaults(suiteName: "group.com.logworks.tourlog") else {
             throw TourLogWidgetIntentError.appGroupUnavailable
         }
         let now = Date()

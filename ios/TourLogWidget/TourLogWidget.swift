@@ -20,7 +20,7 @@ struct TourLogEntry: TimelineEntry {
 
 struct TourLogProvider: TimelineProvider {
 
-    private let appGroupName = "group.com.example.dienstlog"
+    private let appGroupName = "group.com.logworks.tourlog"
 
     func placeholder(in context: Context) -> TourLogEntry {
         TourLogEntry(
@@ -196,7 +196,7 @@ struct TourLogWidgetEntryView: View {
                 } else {
                     Link(
                         destination: URL(
-                            string: "tourlog://quick/work-start"
+                            string: "tourlogapp://quick/work-start"
                         )!
                     ) {
                         TourLogAction(
@@ -211,7 +211,7 @@ struct TourLogWidgetEntryView: View {
                 Link(
                     destination: URL(
                         string:
-                            "tourlog://quick/delivery-start"
+                            "tourlogapp://quick/delivery-start"
                     )!
                 ) {
                     TourLogAction(
@@ -235,7 +235,7 @@ struct TourLogWidgetEntryView: View {
                 }
                 .buttonStyle(.plain)
                 } else {
-                Link(destination: URL(string: "tourlog://quick/delivery-end")!) {
+                Link(destination: URL(string: "tourlogapp://quick/delivery-end")!) {
                     TourLogAction(
                         icon: "shippingbox.fill",
                         title: "Ende",
@@ -255,7 +255,7 @@ struct TourLogWidgetEntryView: View {
                 }
                 .buttonStyle(.plain)
                 } else {
-                Link(destination: URL(string: "tourlog://quick/work-end")!) {
+                Link(destination: URL(string: "tourlogapp://quick/work-end")!) {
                     TourLogAction(
                         icon: "flag.checkered",
                         title: "Feierabend",

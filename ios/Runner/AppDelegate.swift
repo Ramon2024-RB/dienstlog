@@ -6,7 +6,7 @@ import WidgetKit
 @objc class AppDelegate: FlutterAppDelegate, FlutterImplicitEngineDelegate {
 
   private let widgetChannelName = "com.example.dienstlog/widget"
-  private let appGroupName = "group.com.example.dienstlog"
+  private let appGroupName = "group.com.logworks.tourlog"
   private let widgetKind = "TourLogWidget"
 
   override func application(

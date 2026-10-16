@@ -16,13 +16,10 @@ import 'screens/more/more_page.dart';
 import 'screens/quick_entry/quick_entry_card.dart';
 import 'screens/statistics/statistics_page.dart';
 import 'screens/work_schedule/work_schedule_page.dart';
+import 'services/work_day_provider.dart';
 
 void main() {
-  runApp(
-    const ProviderScope(
-      child: TourLogApp(),
-    ),
-  );
+  runApp(const ProviderScope(child: TourLogApp()));
 }
 
 class TourLogApp extends StatelessWidget {
@@ -34,9 +31,7 @@ class TourLogApp extends StatelessWidget {
       title: 'TourLog',
       debugShowCheckedModeBanner: false,
       locale: const Locale('de', 'DE'),
-      supportedLocales: const [
-        Locale('de', 'DE'),
-      ],
+      supportedLocales: const [Locale('de', 'DE')],
       localizationsDelegates: const [
         GlobalMaterialLocalizations.delegate,
         GlobalWidgetsLocalizations.delegate,
@@ -53,9 +48,7 @@ class TourLogApp extends StatelessWidget {
           clipBehavior: Clip.antiAlias,
         ),
         inputDecorationTheme: InputDecorationTheme(
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(16),
-          ),
+          border: OutlineInputBorder(borderRadius: BorderRadius.circular(16)),
         ),
       ),
       darkTheme: ThemeData(
@@ -69,9 +62,7 @@ class TourLogApp extends StatelessWidget {
           clipBehavior: Clip.antiAlias,
         ),
         inputDecorationTheme: InputDecorationTheme(
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(16),
-          ),
+          border: OutlineInputBorder(borderRadius: BorderRadius.circular(16)),
         ),
       ),
       themeMode: ThemeMode.system,
@@ -115,13 +106,17 @@ class _TourLogStartupGateState extends State<TourLogStartupGate> {
             body: Center(
               child: Padding(
                 padding: const EdgeInsets.all(24),
-                child: Text('TourLog konnte die Einrichtung nicht prüfen: ${snapshot.error}'),
+                child: Text(
+                  'TourLog konnte die Einrichtung nicht prüfen: ${snapshot.error}',
+                ),
               ),
             ),
           );
         }
         if (!snapshot.hasData) {
-          return const Scaffold(body: Center(child: CircularProgressIndicator()));
+          return const Scaffold(
+            body: Center(child: CircularProgressIndicator()),
+          );
         }
         if (snapshot.data!) {
           return OnboardingPage(
@@ -130,7 +125,9 @@ class _TourLogStartupGateState extends State<TourLogStartupGate> {
               await prefs.setBool('tourlog_onboarding_completed_v1', true);
               if (context.mounted) {
                 Navigator.of(context).pushReplacement(
-                  MaterialPageRoute<void>(builder: (_) => const MainNavigationPage()),
+                  MaterialPageRoute<void>(
+                    builder: (_) => const MainNavigationPage(),
+                  ),
                 );
               }
             },
@@ -142,47 +139,74 @@ class _TourLogStartupGateState extends State<TourLogStartupGate> {
   }
 }
 
-class MainNavigationPage extends StatefulWidget {
+class MainNavigationPage extends ConsumerStatefulWidget {
   const MainNavigationPage({super.key});
 
   @override
-  State<MainNavigationPage> createState() =>
-      _MainNavigationPageState();
+  ConsumerState<MainNavigationPage> createState() => _MainNavigationPageState();
 }
 
-class _MainNavigationPageState
-    extends State<MainNavigationPage> {
+class _MainNavigationPageState extends ConsumerState<MainNavigationPage>
+    with WidgetsBindingObserver {
   int _selectedIndex = 0;
   QuickEntryExternalAction? _externalQuickAction;
 
   final AppLinks _appLinks = AppLinks();
   StreamSubscription<Uri>? _linkSubscription;
+  bool _refreshingWidgetData = false;
+  bool _refreshAgain = false;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _initializeDeepLinks();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    super.didChangeAppLifecycleState(state);
+    if (state == AppLifecycleState.resumed) {
+      _refreshWidgetData();
+    }
+  }
+
+  Future<void> _refreshWidgetData() async {
+    if (!mounted) return;
+    if (_refreshingWidgetData) {
+      _refreshAgain = true;
+      return;
+    }
+    _refreshingWidgetData = true;
+    try {
+      do {
+        _refreshAgain = false;
+        await ref.read(workDayProvider.notifier).refresh();
+      } while (mounted && _refreshAgain);
+    } catch (error) {
+      // Ein Synchronisierungsfehler darf die Navigation nicht blockieren.
+      debugPrint('Widget-Synchronisierung fehlgeschlagen: $error');
+    } finally {
+      _refreshingWidgetData = false;
+    }
   }
 
   Future<void> _initializeDeepLinks() async {
     try {
       final initialLink = await _appLinks.getInitialLink();
-
       if (initialLink != null && mounted) {
         _handleDeepLink(initialLink);
       }
     } catch (_) {
-      // TourLog startet normal weiter, falls kein
-      // Initial-Link verfügbar ist.
+      // TourLog startet normal weiter, falls kein Initial-Link verfügbar ist.
     }
 
-    _linkSubscription = _appLinks.uriLinkStream.listen(
-      (uri) {
-        if (mounted) {
-          _handleDeepLink(uri);
-        }
-      },
-    );
+    if (!mounted) return;
+    _linkSubscription = _appLinks.uriLinkStream.listen((uri) {
+      if (mounted) {
+        _handleDeepLink(uri);
+      }
+    });
   }
 
   void _handleDeepLink(Uri uri) {
@@ -190,8 +214,7 @@ class _MainNavigationPageState
       return;
     }
 
-    final command =
-        uri.host == 'quick' && uri.pathSegments.isNotEmpty
+    final command = uri.host == 'quick' && uri.pathSegments.isNotEmpty
         ? uri.pathSegments.first
         : uri.pathSegments.isNotEmpty
         ? uri.pathSegments.last
@@ -225,10 +248,7 @@ class _MainNavigationPageState
   }
 
   void _onExternalQuickActionHandled() {
-    if (!mounted) {
-      return;
-    }
-
+    if (!mounted) return;
     setState(() {
       _externalQuickAction = null;
     });
@@ -242,6 +262,7 @@ class _MainNavigationPageState
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _linkSubscription?.cancel();
     super.dispose();
   }
@@ -251,8 +272,7 @@ class _MainNavigationPageState
     final pages = <Widget>[
       HomePage(
         externalQuickAction: _externalQuickAction,
-        onExternalQuickActionHandled:
-            _onExternalQuickActionHandled,
+        onExternalQuickActionHandled: _onExternalQuickActionHandled,
       ),
       const WorkSchedulePage(),
       const CalendarPage(),
@@ -261,10 +281,7 @@ class _MainNavigationPageState
     ];
 
     return Scaffold(
-      body: IndexedStack(
-        index: _selectedIndex,
-        children: pages,
-      ),
+      body: IndexedStack(index: _selectedIndex, children: pages),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _selectedIndex,
         onDestinationSelected: _onDestinationSelected,

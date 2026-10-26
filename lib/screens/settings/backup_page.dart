@@ -1,5 +1,9 @@
+import 'dart:convert';
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 
+import '../../services/app_database.dart';
 import '../../services/backup_service.dart';
 
 class BackupPage extends StatefulWidget {
@@ -14,13 +18,12 @@ class _BackupPageState extends State<BackupPage> {
   bool _isImportingBackup = false;
 
   Future<void> _exportBackup() async {
-    setState(() {
-      _isExportingBackup = true;
-    });
+    if (_isExportingBackup || _isImportingBackup) return;
+
+    setState(() => _isExportingBackup = true);
 
     try {
       final box = context.findRenderObject() as RenderBox?;
-
       final sharePositionOrigin = box == null
           ? const Rect.fromLTWH(1, 1, 1, 1)
           : box.localToGlobal(Offset.zero) & box.size;
@@ -29,112 +32,230 @@ class _BackupPageState extends State<BackupPage> {
         sharePositionOrigin: sharePositionOrigin,
       );
 
-      if (!mounted) {
-        return;
-      }
-
-      _showMessage('Backup wurde erstellt.');
+      if (!mounted) return;
+      _showMessage(
+        'Backup-Datei erstellt. Bitte prüfe, ob du sie in „Dateien“ '
+        'oder an einem anderen sicheren Ort gespeichert hast.',
+      );
     } catch (error, stackTrace) {
       debugPrint('BACKUP EXPORT ERROR: $error');
       debugPrintStack(stackTrace: stackTrace);
 
-      if (!mounted) {
-        return;
-      }
-
+      if (!mounted) return;
       await showDialog<void>(
         context: context,
-        builder: (context) {
-          return AlertDialog(
-            title: const Text('Backup-Fehler'),
-            content: SelectableText(error.toString()),
-            actions: [
-              FilledButton(
-                onPressed: () => Navigator.pop(context),
-                child: const Text('OK'),
-              ),
-            ],
-          );
-        },
+        builder: (dialogContext) => AlertDialog(
+          title: const Text('Backup-Fehler'),
+          content: SelectableText(error.toString()),
+          actions: [
+            FilledButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('OK'),
+            ),
+          ],
+        ),
       );
     } finally {
-      if (mounted) {
-        setState(() {
-          _isExportingBackup = false;
-        });
-      }
+      if (mounted) setState(() => _isExportingBackup = false);
     }
   }
 
   Future<void> _importBackup() async {
-    final path = await BackupService.instance.pickBackupFile();
-
-    if (path == null || !mounted) {
-      return;
-    }
-
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) {
-        return AlertDialog(
-          title: const Text('Backup importieren?'),
-          content: const Text(
-            'Beim Import werden die aktuell in TourLog gespeicherten Daten '
-            'vollständig durch die Daten aus dem Backup ersetzt.\n\n'
-            'Erstelle vorher ein Backup, wenn du die aktuellen Daten behalten möchtest.',
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: const Text('Abbrechen'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.pop(context, true),
-              child: const Text('Importieren'),
-            ),
-          ],
-        );
-      },
-    );
-
-    if (confirmed != true || !mounted) {
-      return;
-    }
-
-    setState(() {
-      _isImportingBackup = true;
-    });
+    if (_isImportingBackup || _isExportingBackup) return;
+    setState(() => _isImportingBackup = true);
 
     try {
-      await BackupService.instance.importBackupFile(path);
+      final path = await BackupService.instance.pickBackupFile();
+      if (path == null || !mounted) return;
 
-      if (!mounted) {
-        return;
-      }
+      // Nur lesen: Bis zur ausdrücklichen Bestätigung wird nichts importiert.
+      final preview = await _readBackupPreview(path);
+      if (!mounted) return;
+
+      final confirmed = await _confirmImport(preview);
+      if (confirmed != true || !mounted) return;
+
+      // Die tiefergehende Datenprüfung erfolgt zusätzlich im Datenbank-Import.
+      await BackupService.instance.importBackupFile(path);
+      if (!mounted) return;
 
       _showMessage('Backup erfolgreich importiert.');
-    } catch (error) {
-      if (!mounted) {
-        return;
-      }
-
-      _showMessage(
-        'Backup konnte nicht importiert werden. '
-        'Bitte prüfe, ob es eine gültige TourLog-Backup-Datei ist.',
+    } on FormatException catch (error) {
+      if (!mounted) return;
+      await _showImportError(error.message);
+    } catch (error, stackTrace) {
+      debugPrint('BACKUP IMPORT ERROR: $error');
+      debugPrintStack(stackTrace: stackTrace);
+      if (!mounted) return;
+      await _showImportError(
+        'Das Backup konnte nicht importiert werden. '
+        'Deine Daten sollten bei einem Datenbankfehler durch die '
+        'Transaktion geschützt sein. Bitte prüfe die Datei.',
       );
     } finally {
-      if (mounted) {
-        setState(() {
-          _isImportingBackup = false;
-        });
-      }
+      if (mounted) setState(() => _isImportingBackup = false);
     }
   }
 
-  void _showMessage(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message)),
+  Future<_BackupPreview> _readBackupPreview(String path) async {
+    final file = File(path);
+    if (!await file.exists()) {
+      throw const FormatException(
+        'Die ausgewählte Datei wurde nicht gefunden.',
+      );
+    }
+
+    final dynamic decoded;
+    try {
+      decoded = jsonDecode(await file.readAsString());
+    } on FormatException {
+      throw const FormatException('Die Datei enthält kein gültiges JSON.');
+    }
+
+    if (decoded is! Map<String, dynamic>) {
+      throw const FormatException(
+        'Dies ist keine gültige TourLog-Backup-Datei.',
+      );
+    }
+    // Genau dieselbe vollständige, rein lesende Prüfung wie beim Import.
+    // Sie verändert keine gespeicherten TourLog-Daten.
+    final backup = Map<String, Object?>.from(decoded);
+    final counts = AppDatabase.instance.inspectBackupData(backup);
+    final databaseVersion = backup['database_version'];
+
+    DateTime? createdAt;
+    if (decoded['created_at'] is String) {
+      createdAt = DateTime.tryParse(decoded['created_at'] as String)?.toLocal();
+    }
+
+    return _BackupPreview(
+      createdAt: createdAt,
+      databaseVersion: databaseVersion is int ? databaseVersion : null,
+      counts: counts,
     );
+  }
+
+  Future<bool?> _confirmImport(_BackupPreview preview) async {
+    var acknowledged = false;
+
+    return showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, updateDialog) => AlertDialog(
+          title: const Text('Backup überprüfen'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Inhalt der ausgewählten Sicherung:',
+                  style: Theme.of(dialogContext).textTheme.bodyMedium,
+                ),
+                const SizedBox(height: 12),
+                _PreviewDetail(label: 'Erstellt', value: preview.createdAtText),
+                _PreviewDetail(
+                  label: 'Datenbankversion',
+                  value: preview.databaseVersion?.toString() ?? 'Unbekannt',
+                ),
+                _PreviewDetail(
+                  label: 'Arbeitstage',
+                  value: '${preview.count('work_days')}',
+                ),
+                _PreviewDetail(
+                  label: 'Bezirke',
+                  value: '${preview.count('districts')}',
+                ),
+                _PreviewDetail(
+                  label: 'Dienstplaneinträge',
+                  value: '${preview.count('work_schedule_entries')}',
+                ),
+                _PreviewDetail(
+                  label: 'Eigene Touren',
+                  value: '${preview.count('own_tour_entries')}',
+                ),
+                _PreviewDetail(
+                  label: 'Unterstützungseinträge',
+                  value: '${preview.count('support_entries')}',
+                ),
+                const SizedBox(height: 14),
+                if (preview.count('work_days') == 0) ...[
+                  Text(
+                    'Achtung: Diese Sicherung enthält keine Arbeitstage.',
+                    style: TextStyle(
+                      color: Theme.of(dialogContext).colorScheme.error,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                ],
+                Text(
+                  'ACHTUNG: Beim Import werden ALLE aktuell gespeicherten '
+                  'TourLog-Daten vollständig durch dieses Backup ersetzt. '
+                  'Das lässt sich nicht rückgängig machen.',
+                  style: TextStyle(
+                    color: Theme.of(dialogContext).colorScheme.error,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                const Text(
+                  'Sichere deine aktuellen Daten zuerst separat. '
+                  'Die Vorschau ist eine erste Prüfung, kein vollständiger '
+                  'Wiederherstellungstest.',
+                ),
+                const SizedBox(height: 12),
+                CheckboxListTile(
+                  contentPadding: EdgeInsets.zero,
+                  controlAffinity: ListTileControlAffinity.leading,
+                  value: acknowledged,
+                  onChanged: (value) =>
+                      updateDialog(() => acknowledged = value ?? false),
+                  title: const Text(
+                    'Ich verstehe, dass alle bisherigen Daten ersetzt werden.',
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: const Text('Abbrechen'),
+            ),
+            FilledButton(
+              onPressed: acknowledged
+                  ? () => Navigator.pop(dialogContext, true)
+                  : null,
+              child: const Text('Daten ersetzen'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _showImportError(String message) async {
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Backup konnte nicht importiert werden'),
+        content: Text(message),
+        actions: [
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('OK'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showMessage(String message) {
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
   }
 
   @override
@@ -219,7 +340,8 @@ class _BackupPageState extends State<BackupPage> {
           ),
           const SizedBox(height: 7),
           Text(
-            'Ein Backup enthält deine in TourLog gespeicherten Daten und kann später wieder importiert werden.',
+            'Ein Backup enthält die in der TourLog-Datenbank gespeicherten '
+            'Arbeits- und Planungsdaten.',
             style: theme.textTheme.bodySmall?.copyWith(
               color: theme.colorScheme.onSurfaceVariant,
             ),
@@ -239,7 +361,8 @@ class _BackupPageState extends State<BackupPage> {
                 _BackupTile(
                   icon: Icons.settings_backup_restore_outlined,
                   title: 'Backup importieren',
-                  subtitle: 'Gesicherte TourLog-Daten wiederherstellen',
+                  subtitle:
+                      'Backup zuerst ansehen, dann Wiederherstellung bestätigen',
                   isLoading: _isImportingBackup,
                   onTap: isBusy ? null : _importBackup,
                 ),
@@ -250,8 +373,9 @@ class _BackupPageState extends State<BackupPage> {
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color: theme.colorScheme.surfaceContainerHighest
-                  .withValues(alpha: 0.38),
+              color: theme.colorScheme.surfaceContainerHighest.withValues(
+                alpha: 0.38,
+              ),
               borderRadius: BorderRadius.circular(18),
             ),
             child: Row(
@@ -263,12 +387,11 @@ class _BackupPageState extends State<BackupPage> {
                   color: theme.colorScheme.primary,
                 ),
                 const SizedBox(width: 11),
-                Expanded(
+                const Expanded(
                   child: Text(
-                    'Beim Import werden die aktuell gespeicherten TourLog-Daten vollständig durch das ausgewählte Backup ersetzt. Erstelle deshalb vor einem Import am besten zuerst ein aktuelles Backup.',
-                    style: theme.textTheme.bodyMedium?.copyWith(
-                      color: theme.colorScheme.onSurfaceVariant,
-                    ),
+                    'Beim Import werden alle aktuell gespeicherten '
+                    'TourLog-Daten ersetzt. Erstelle zuvor ein neues Backup '
+                    'und bewahre es außerhalb der App auf.',
                   ),
                 ),
               ],
@@ -278,6 +401,46 @@ class _BackupPageState extends State<BackupPage> {
       ),
     );
   }
+}
+
+class _BackupPreview {
+  const _BackupPreview({
+    required this.createdAt,
+    required this.databaseVersion,
+    required this.counts,
+  });
+
+  final DateTime? createdAt;
+  final int? databaseVersion;
+  final Map<String, int> counts;
+
+  int count(String table) => counts[table] ?? 0;
+
+  String get createdAtText {
+    final value = createdAt;
+    if (value == null) return 'Unbekannt';
+    String two(int n) => n.toString().padLeft(2, '0');
+    return '${two(value.day)}.${two(value.month)}.${value.year}, '
+        '${two(value.hour)}:${two(value.minute)}';
+  }
+}
+
+class _PreviewDetail extends StatelessWidget {
+  const _PreviewDetail({required this.label, required this.value});
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.symmetric(vertical: 3),
+    child: Row(
+      children: [
+        Expanded(child: Text(label)),
+        Text(value, style: const TextStyle(fontWeight: FontWeight.w700)),
+      ],
+    ),
+  );
 }
 
 class _BackupTile extends StatelessWidget {
@@ -309,15 +472,9 @@ class _BackupTile extends StatelessWidget {
           color: theme.colorScheme.primaryContainer.withValues(alpha: 0.72),
           borderRadius: BorderRadius.circular(14),
         ),
-        child: Icon(
-          icon,
-          color: theme.colorScheme.onPrimaryContainer,
-        ),
+        child: Icon(icon, color: theme.colorScheme.onPrimaryContainer),
       ),
-      title: Text(
-        title,
-        style: const TextStyle(fontWeight: FontWeight.w700),
-      ),
+      title: Text(title, style: const TextStyle(fontWeight: FontWeight.w700)),
       subtitle: Padding(
         padding: const EdgeInsets.only(top: 3),
         child: Text(subtitle),

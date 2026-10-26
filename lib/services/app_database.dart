@@ -63,11 +63,7 @@ class AppDatabase {
     // Bestehende Datenbanken werden durch diese Änderung nicht verändert.
   }
 
-  Future<void> _onUpgrade(
-    Database db,
-    int oldVersion,
-    int newVersion,
-  ) async {
+  Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
     if (oldVersion < 2) {
       await _upgradeFromVersion1ToVersion2(db);
     }
@@ -101,21 +97,18 @@ class AppDatabase {
   }
 
   Future<void> _createZspLocationsTable(Database db) async {
-    await db.execute(
-      '''
+    await db.execute('''
       CREATE TABLE zsp_locations (
         id TEXT PRIMARY KEY,
         name TEXT NOT NULL UNIQUE,
         is_default INTEGER NOT NULL DEFAULT 0,
         is_active INTEGER NOT NULL DEFAULT 1
       )
-      ''',
-    );
+      ''');
   }
 
   Future<void> _createDistrictsTable(Database db) async {
-    await db.execute(
-      '''
+    await db.execute('''
       CREATE TABLE districts (
         zsp_id TEXT NOT NULL,
         number INTEGER NOT NULL,
@@ -125,13 +118,11 @@ class AppDatabase {
         PRIMARY KEY (zsp_id, number),
         FOREIGN KEY (zsp_id) REFERENCES zsp_locations(id)
       )
-      ''',
-    );
+      ''');
   }
 
   Future<void> _createWorkDaysTable(Database db) async {
-    await db.execute(
-      '''
+    await db.execute('''
       CREATE TABLE work_days (
         id TEXT PRIMARY KEY,
         date TEXT NOT NULL UNIQUE,
@@ -154,13 +145,11 @@ class AppDatabase {
         notes TEXT,
         FOREIGN KEY (zsp_id) REFERENCES zsp_locations(id)
       )
-      ''',
-    );
+      ''');
   }
 
   Future<void> _createSupportEntriesTable(Database db) async {
-    await db.execute(
-      '''
+    await db.execute('''
       CREATE TABLE support_entries (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         work_day_id TEXT NOT NULL,
@@ -172,13 +161,11 @@ class AppDatabase {
           REFERENCES work_days(id)
           ON DELETE CASCADE
       )
-      ''',
-    );
+      ''');
   }
 
   Future<void> _createOwnTourEntriesTable(Database db) async {
-    await db.execute(
-      '''
+    await db.execute('''
       CREATE TABLE own_tour_entries (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         work_day_id TEXT NOT NULL,
@@ -191,13 +178,11 @@ class AppDatabase {
           REFERENCES work_days(id)
           ON DELETE CASCADE
       )
-      ''',
-    );
+      ''');
   }
 
   Future<void> _createPackageDriverEntriesTable(Database db) async {
-    await db.execute(
-      '''
+    await db.execute('''
       CREATE TABLE package_driver_entries (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         work_day_id TEXT NOT NULL,
@@ -205,13 +190,11 @@ class AppDatabase {
         zsp_id TEXT NOT NULL DEFAULT 'zsp-werneck',
         FOREIGN KEY (work_day_id) REFERENCES work_days(id) ON DELETE CASCADE
       )
-      ''',
-    );
+      ''');
   }
 
   Future<void> _createMondayDeliveryEntriesTable(Database db) async {
-    await db.execute(
-      '''
+    await db.execute('''
       CREATE TABLE monday_delivery_entries (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         work_day_id TEXT NOT NULL,
@@ -219,15 +202,11 @@ class AppDatabase {
         zsp_id TEXT NOT NULL DEFAULT 'zsp-werneck',
         FOREIGN KEY (work_day_id) REFERENCES work_days(id) ON DELETE CASCADE
       )
-      ''',
-    );
+      ''');
   }
 
-  Future<void> _createWorkScheduleEntriesTable(
-    Database db,
-  ) async {
-    await db.execute(
-      '''
+  Future<void> _createWorkScheduleEntriesTable(Database db) async {
+    await db.execute('''
       CREATE TABLE work_schedule_entries (
         id TEXT PRIMARY KEY,
         date TEXT NOT NULL UNIQUE,
@@ -235,104 +214,80 @@ class AppDatabase {
         districts TEXT NOT NULL DEFAULT '',
         notes TEXT
       )
-      ''',
-    );
+      ''');
   }
 
-  Future<void> _createWorkTimeSettingsTable(
-    Database db,
-  ) async {
-    await db.execute(
-      '''
+  Future<void> _createWorkTimeSettingsTable(Database db) async {
+    await db.execute('''
       CREATE TABLE work_time_settings (
         weekday INTEGER PRIMARY KEY,
         start_minutes INTEGER,
         end_minutes INTEGER,
         break_minutes INTEGER
       )
-      ''',
-    );
+      ''');
   }
 
   Future<void> _createAdvertisingTable(Database db) async {
-    await db.execute(
-      '''
+    await db.execute('''
       CREATE TABLE advertising (
         id TEXT PRIMARY KEY,
         name TEXT NOT NULL UNIQUE
       )
-      ''',
-    );
+      ''');
   }
 
   Future<void> _upgradeFromVersion1ToVersion2(Database db) async {
     await db.transaction((txn) async {
-      await txn.execute(
-        '''
+      await txn.execute('''
         ALTER TABLE work_days
         ADD COLUMN assignment_type TEXT NOT NULL DEFAULT 'ownDistrict'
-        ''',
-      );
+        ''');
 
-      await txn.execute(
-        '''
+      await txn.execute('''
         ALTER TABLE work_days
         ADD COLUMN district_part TEXT NOT NULL DEFAULT 'full'
-        ''',
-      );
+        ''');
 
-      await txn.execute(
-        '''
+      await txn.execute('''
         ALTER TABLE work_days
         ADD COLUMN departure_time INTEGER
-        ''',
-      );
+        ''');
 
-      await txn.execute(
-        '''
+      await txn.execute('''
         ALTER TABLE work_days
         ADD COLUMN cancelled_package_count INTEGER NOT NULL DEFAULT 0
-        ''',
-      );
+        ''');
 
-      await txn.execute(
-        '''
+      await txn.execute('''
         ALTER TABLE work_days
         ADD COLUMN has_advertising INTEGER NOT NULL DEFAULT 0
-        ''',
-      );
+        ''');
 
-      await txn.execute(
-        '''
+      await txn.execute('''
         ALTER TABLE work_days
         ADD COLUMN advertising TEXT
-        ''',
-      );
+        ''');
 
-      await txn.execute(
-        '''
+      await txn.execute('''
         UPDATE work_days
         SET assignment_type = CASE
           WHEN is_package_driver = 1 THEN 'packageDriver'
           ELSE 'ownDistrict'
         END
-        ''',
-      );
+        ''');
 
-      await txn.execute(
-        '''
+      await txn.execute('''
         UPDATE work_days
         SET departure_time = delivery_start
         WHERE departure_time IS NULL
-        ''',
-      );
+        ''');
     });
   }
 
   Future<void> _upgradeFromVersion2ToVersion3(Database db) async {
     await db.transaction((txn) async {
-      await txn.execute(
-        '''
+      await txn.execute('''
         CREATE TABLE own_tour_entries (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
           work_day_id TEXT NOT NULL,
@@ -344,11 +299,9 @@ class AppDatabase {
             REFERENCES work_days(id)
             ON DELETE CASCADE
         )
-        ''',
-      );
+        ''');
 
-      await txn.execute(
-        '''
+      await txn.execute('''
         INSERT INTO own_tour_entries (
           work_day_id,
           district,
@@ -367,8 +320,7 @@ class AppDatabase {
           AND assignment_type = 'ownDistrict'
           AND district_id IS NOT NULL
           AND TRIM(district_id) != ''
-        ''',
-      );
+        ''');
     });
   }
 
@@ -386,30 +338,23 @@ class AppDatabase {
 
   Future<void> _upgradeFromVersion6ToVersion7(Database db) async {
     await db.transaction((txn) async {
-      await txn.execute(
-        '''
+      await txn.execute('''
         CREATE TABLE zsp_locations (
           id TEXT PRIMARY KEY,
           name TEXT NOT NULL UNIQUE,
           is_default INTEGER NOT NULL DEFAULT 0,
           is_active INTEGER NOT NULL DEFAULT 1
         )
-        ''',
-      );
+        ''');
 
-      await txn.insert(
-        'zsp_locations',
-        {
-          'id': ZspLocation.werneckId,
-          'name': 'ZSP Werneck',
-          'is_default': 1,
-          'is_active': 1,
-        },
-        conflictAlgorithm: ConflictAlgorithm.ignore,
-      );
+      await txn.insert('zsp_locations', {
+        'id': ZspLocation.werneckId,
+        'name': 'ZSP Werneck',
+        'is_default': 1,
+        'is_active': 1,
+      }, conflictAlgorithm: ConflictAlgorithm.ignore);
 
-      await txn.execute(
-        '''
+      await txn.execute('''
         CREATE TABLE districts_v7 (
           zsp_id TEXT NOT NULL,
           number INTEGER NOT NULL,
@@ -419,8 +364,7 @@ class AppDatabase {
           PRIMARY KEY (zsp_id, number),
           FOREIGN KEY (zsp_id) REFERENCES zsp_locations(id)
         )
-        ''',
-      );
+        ''');
 
       await txn.execute(
         '''
@@ -447,14 +391,11 @@ class AppDatabase {
 
   Future<void> _upgradeFromVersion7ToVersion8(Database db) async {
     await db.transaction((txn) async {
-      await txn.execute(
-        '''
+      await txn.execute('''
         ALTER TABLE work_days
         ADD COLUMN package_driver_package_count INTEGER NOT NULL DEFAULT 0
-        ''',
-      );
-      await txn.execute(
-        '''
+        ''');
+      await txn.execute('''
         CREATE TABLE package_driver_entries (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
           work_day_id TEXT NOT NULL,
@@ -462,10 +403,8 @@ class AppDatabase {
           zsp_id TEXT NOT NULL DEFAULT 'zsp-werneck',
           FOREIGN KEY (work_day_id) REFERENCES work_days(id) ON DELETE CASCADE
         )
-        ''',
-      );
-      await txn.execute(
-        '''
+        ''');
+      await txn.execute('''
         INSERT INTO package_driver_entries (work_day_id, district, zsp_id)
         SELECT DISTINCT se.work_day_id, se.district, se.zsp_id
         FROM support_entries se
@@ -473,22 +412,18 @@ class AppDatabase {
         WHERE wd.type = 'work'
           AND wd.assignment_type = 'packageDriver'
           AND TRIM(se.district) != ''
-        ''',
-      );
+        ''');
     });
   }
 
   Future<void> _upgradeFromVersion8ToVersion9(Database db) async {
     await db.transaction((txn) async {
-      await txn.execute(
-        '''
+      await txn.execute('''
         ALTER TABLE work_days
         ADD COLUMN monday_delivery_package_count INTEGER NOT NULL DEFAULT 0
-        ''',
-      );
+        ''');
 
-      await txn.execute(
-        '''
+      await txn.execute('''
         CREATE TABLE monday_delivery_entries (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
           work_day_id TEXT NOT NULL,
@@ -496,8 +431,7 @@ class AppDatabase {
           zsp_id TEXT NOT NULL DEFAULT 'zsp-werneck',
           FOREIGN KEY (work_day_id) REFERENCES work_days(id) ON DELETE CASCADE
         )
-        ''',
-      );
+        ''');
     });
   }
 
@@ -629,10 +563,7 @@ class AppDatabase {
   Future<List<WorkDay>> getWorkDays() async {
     final db = await database;
 
-    final maps = await db.query(
-      'work_days',
-      orderBy: 'date DESC',
-    );
+    final maps = await db.query('work_days', orderBy: 'date DESC');
 
     return maps.map(WorkDay.fromMap).toList();
   }
@@ -725,11 +656,7 @@ class AppDatabase {
         whereArgs: [id],
       );
 
-      await txn.delete(
-        'work_days',
-        where: 'id = ?',
-        whereArgs: [id],
-      );
+      await txn.delete('work_days', where: 'id = ?', whereArgs: [id]);
     });
   }
 
@@ -754,13 +681,9 @@ class AppDatabase {
   ) async {
     final db = await database;
 
-    final normalizedStartDate = _normalizeDate(
-      startDate,
-    );
+    final normalizedStartDate = _normalizeDate(startDate);
 
-    final normalizedEndDate = _normalizeDate(
-      endDate,
-    );
+    final normalizedEndDate = _normalizeDate(endDate);
 
     final maps = await db.rawQuery(
       '''
@@ -773,33 +696,21 @@ class AppDatabase {
         AND wd.type = ?
       ORDER BY wd.date ASC, ote.id ASC
       ''',
-      [
-        normalizedStartDate,
-        normalizedEndDate,
-        WorkDayType.work.name,
-      ],
+      [normalizedStartDate, normalizedEndDate, WorkDayType.work.name],
     );
 
     return maps.map(OwnTourEntry.fromMap).toList();
   }
 
-  Future<int> insertOwnTourEntry(
-    OwnTourEntry entry,
-  ) async {
+  Future<int> insertOwnTourEntry(OwnTourEntry entry) async {
     final db = await database;
 
-    final map = entry.toMap()
-      ..remove('id');
+    final map = entry.toMap()..remove('id');
 
-    return db.insert(
-      'own_tour_entries',
-      map,
-    );
+    return db.insert('own_tour_entries', map);
   }
 
-  Future<void> updateOwnTourEntry(
-    OwnTourEntry entry,
-  ) async {
+  Future<void> updateOwnTourEntry(OwnTourEntry entry) async {
     if (entry.id == null) {
       throw ArgumentError(
         'OwnTourEntry muss eine ID besitzen, um aktualisiert zu werden.',
@@ -819,11 +730,7 @@ class AppDatabase {
   Future<void> deleteOwnTourEntry(int id) async {
     final db = await database;
 
-    await db.delete(
-      'own_tour_entries',
-      where: 'id = ?',
-      whereArgs: [id],
-    );
+    await db.delete('own_tour_entries', where: 'id = ?', whereArgs: [id]);
   }
 
   Future<void> replaceOwnTourEntriesForWorkDay(
@@ -840,25 +747,15 @@ class AppDatabase {
       );
 
       for (final entry in entries) {
-        final map = entry
-            .copyWith(
-              workDayId: workDayId,
-              clearId: true,
-            )
-            .toMap()
+        final map = entry.copyWith(workDayId: workDayId, clearId: true).toMap()
           ..remove('id');
 
-        await txn.insert(
-          'own_tour_entries',
-          map,
-        );
+        await txn.insert('own_tour_entries', map);
       }
     });
   }
 
-  Future<int> getTotalOwnTourPackagesForWorkDay(
-    String workDayId,
-  ) async {
+  Future<int> getTotalOwnTourPackagesForWorkDay(String workDayId) async {
     final db = await database;
 
     final result = await db.rawQuery(
@@ -879,9 +776,7 @@ class AppDatabase {
       [workDayId],
     );
 
-    return _readIntValue(
-      result.first['total'],
-    );
+    return _readIntValue(result.first['total']);
   }
 
   Future<int> getTotalOwnTourPackagesForDateRange(
@@ -890,13 +785,9 @@ class AppDatabase {
   ) async {
     final db = await database;
 
-    final normalizedStartDate = _normalizeDate(
-      startDate,
-    );
+    final normalizedStartDate = _normalizeDate(startDate);
 
-    final normalizedEndDate = _normalizeDate(
-      endDate,
-    );
+    final normalizedEndDate = _normalizeDate(endDate);
 
     final result = await db.rawQuery(
       '''
@@ -917,16 +808,10 @@ class AppDatabase {
         AND wd.date <= ?
         AND wd.type = ?
       ''',
-      [
-        normalizedStartDate,
-        normalizedEndDate,
-        WorkDayType.work.name,
-      ],
+      [normalizedStartDate, normalizedEndDate, WorkDayType.work.name],
     );
 
-    return _readIntValue(
-      result.first['total'],
-    );
+    return _readIntValue(result.first['total']);
   }
 
   Future<int> getTotalCancelledOwnTourPackagesForDateRange(
@@ -935,13 +820,9 @@ class AppDatabase {
   ) async {
     final db = await database;
 
-    final normalizedStartDate = _normalizeDate(
-      startDate,
-    );
+    final normalizedStartDate = _normalizeDate(startDate);
 
-    final normalizedEndDate = _normalizeDate(
-      endDate,
-    );
+    final normalizedEndDate = _normalizeDate(endDate);
 
     final result = await db.rawQuery(
       '''
@@ -956,16 +837,10 @@ class AppDatabase {
         AND wd.date <= ?
         AND wd.type = ?
       ''',
-      [
-        normalizedStartDate,
-        normalizedEndDate,
-        WorkDayType.work.name,
-      ],
+      [normalizedStartDate, normalizedEndDate, WorkDayType.work.name],
     );
 
-    return _readIntValue(
-      result.first['total'],
-    );
+    return _readIntValue(result.first['total']);
   }
 
   Future<List<PackageDriverEntry>> getPackageDriverEntriesForWorkDay(
@@ -1029,18 +904,10 @@ class AppDatabase {
       );
 
       for (final entry in entries) {
-        final map = entry
-            .copyWith(
-              workDayId: workDayId,
-              clearId: true,
-            )
-            .toMap()
+        final map = entry.copyWith(workDayId: workDayId, clearId: true).toMap()
           ..remove('id');
 
-        await txn.insert(
-          'monday_delivery_entries',
-          map,
-        );
+        await txn.insert('monday_delivery_entries', map);
       }
     });
   }
@@ -1060,23 +927,15 @@ class AppDatabase {
     return maps.map(SupportEntry.fromMap).toList();
   }
 
-  Future<int> insertSupportEntry(
-    SupportEntry entry,
-  ) async {
+  Future<int> insertSupportEntry(SupportEntry entry) async {
     final db = await database;
 
-    final map = entry.toMap()
-      ..remove('id');
+    final map = entry.toMap()..remove('id');
 
-    return db.insert(
-      'support_entries',
-      map,
-    );
+    return db.insert('support_entries', map);
   }
 
-  Future<void> updateSupportEntry(
-    SupportEntry entry,
-  ) async {
+  Future<void> updateSupportEntry(SupportEntry entry) async {
     if (entry.id == null) {
       throw ArgumentError(
         'SupportEntry muss eine ID besitzen, um aktualisiert zu werden.',
@@ -1096,11 +955,7 @@ class AppDatabase {
   Future<void> deleteSupportEntry(int id) async {
     final db = await database;
 
-    await db.delete(
-      'support_entries',
-      where: 'id = ?',
-      whereArgs: [id],
-    );
+    await db.delete('support_entries', where: 'id = ?', whereArgs: [id]);
   }
 
   Future<void> replaceSupportEntriesForWorkDay(
@@ -1117,24 +972,14 @@ class AppDatabase {
       );
 
       for (final entry in entries) {
-        final map = entry
-            .copyWith(
-              workDayId: workDayId,
-            )
-            .toMap()
-          ..remove('id');
+        final map = entry.copyWith(workDayId: workDayId).toMap()..remove('id');
 
-        await txn.insert(
-          'support_entries',
-          map,
-        );
+        await txn.insert('support_entries', map);
       }
     });
   }
 
-  Future<int> getTotalSupportPackagesForWorkDay(
-    String workDayId,
-  ) async {
+  Future<int> getTotalSupportPackagesForWorkDay(String workDayId) async {
     final db = await database;
 
     final result = await db.rawQuery(
@@ -1146,9 +991,7 @@ class AppDatabase {
       [workDayId],
     );
 
-    return _readIntValue(
-      result.first['total'],
-    );
+    return _readIntValue(result.first['total']);
   }
 
   Future<int> getTotalSupportPackagesForDateRange(
@@ -1157,13 +1000,9 @@ class AppDatabase {
   ) async {
     final db = await database;
 
-    final normalizedStartDate = _normalizeDate(
-      startDate,
-    );
+    final normalizedStartDate = _normalizeDate(startDate);
 
-    final normalizedEndDate = _normalizeDate(
-      endDate,
-    );
+    final normalizedEndDate = _normalizeDate(endDate);
 
     final result = await db.rawQuery(
       '''
@@ -1175,32 +1014,21 @@ class AppDatabase {
         AND wd.date <= ?
         AND wd.type = ?
       ''',
-      [
-        normalizedStartDate,
-        normalizedEndDate,
-        WorkDayType.work.name,
-      ],
+      [normalizedStartDate, normalizedEndDate, WorkDayType.work.name],
     );
 
-    return _readIntValue(
-      result.first['total'],
-    );
+    return _readIntValue(result.first['total']);
   }
 
   Future<List<WorkScheduleEntry>> getWorkScheduleEntries() async {
     final db = await database;
 
-    final maps = await db.query(
-      'work_schedule_entries',
-      orderBy: 'date ASC',
-    );
+    final maps = await db.query('work_schedule_entries', orderBy: 'date ASC');
 
     return maps.map(WorkScheduleEntry.fromMap).toList();
   }
 
-  Future<WorkScheduleEntry?> getWorkScheduleEntryById(
-    String id,
-  ) async {
+  Future<WorkScheduleEntry?> getWorkScheduleEntryById(String id) async {
     final db = await database;
 
     final maps = await db.query(
@@ -1217,14 +1045,10 @@ class AppDatabase {
     return WorkScheduleEntry.fromMap(maps.first);
   }
 
-  Future<WorkScheduleEntry?> getWorkScheduleEntryByDate(
-    DateTime date,
-  ) async {
+  Future<WorkScheduleEntry?> getWorkScheduleEntryByDate(DateTime date) async {
     final db = await database;
 
-    final normalizedDate = _normalizeDate(
-      date,
-    );
+    final normalizedDate = _normalizeDate(date);
 
     final maps = await db.query(
       'work_schedule_entries',
@@ -1246,30 +1070,21 @@ class AppDatabase {
   ) async {
     final db = await database;
 
-    final normalizedStartDate = _normalizeDate(
-      startDate,
-    );
+    final normalizedStartDate = _normalizeDate(startDate);
 
-    final normalizedEndDate = _normalizeDate(
-      endDate,
-    );
+    final normalizedEndDate = _normalizeDate(endDate);
 
     final maps = await db.query(
       'work_schedule_entries',
       where: 'date >= ? AND date <= ?',
-      whereArgs: [
-        normalizedStartDate,
-        normalizedEndDate,
-      ],
+      whereArgs: [normalizedStartDate, normalizedEndDate],
       orderBy: 'date ASC',
     );
 
     return maps.map(WorkScheduleEntry.fromMap).toList();
   }
 
-  Future<void> insertWorkScheduleEntry(
-    WorkScheduleEntry entry,
-  ) async {
+  Future<void> insertWorkScheduleEntry(WorkScheduleEntry entry) async {
     final db = await database;
 
     await db.insert(
@@ -1279,9 +1094,7 @@ class AppDatabase {
     );
   }
 
-  Future<void> updateWorkScheduleEntry(
-    WorkScheduleEntry entry,
-  ) async {
+  Future<void> updateWorkScheduleEntry(WorkScheduleEntry entry) async {
     final db = await database;
 
     await db.update(
@@ -1292,31 +1105,20 @@ class AppDatabase {
     );
   }
 
-  Future<void> deleteWorkScheduleEntry(
-    String id,
-  ) async {
+  Future<void> deleteWorkScheduleEntry(String id) async {
     final db = await database;
 
-    await db.delete(
-      'work_schedule_entries',
-      where: 'id = ?',
-      whereArgs: [id],
-    );
+    await db.delete('work_schedule_entries', where: 'id = ?', whereArgs: [id]);
   }
 
   Future<Map<int, Map<String, int?>>> getWorkTimeSettings() async {
     final db = await database;
 
-    final maps = await db.query(
-      'work_time_settings',
-      orderBy: 'weekday ASC',
-    );
+    final maps = await db.query('work_time_settings', orderBy: 'weekday ASC');
 
     final result = <int, Map<String, int?>>{};
 
-    for (var weekday = DateTime.monday;
-        weekday <= DateTime.sunday;
-        weekday++) {
+    for (var weekday = DateTime.monday; weekday <= DateTime.sunday; weekday++) {
       result[weekday] = {
         'start_minutes': null,
         'end_minutes': null,
@@ -1337,9 +1139,7 @@ class AppDatabase {
     return result;
   }
 
-  Future<Map<String, int?>?> getWorkTimeSettingForWeekday(
-    int weekday,
-  ) async {
+  Future<Map<String, int?>?> getWorkTimeSettingForWeekday(int weekday) async {
     final db = await database;
 
     final maps = await db.query(
@@ -1370,21 +1170,15 @@ class AppDatabase {
   }) async {
     final db = await database;
 
-    await db.insert(
-      'work_time_settings',
-      {
-        'weekday': weekday,
-        'start_minutes': startMinutes,
-        'end_minutes': endMinutes,
-        'break_minutes': breakMinutes,
-      },
-      conflictAlgorithm: ConflictAlgorithm.replace,
-    );
+    await db.insert('work_time_settings', {
+      'weekday': weekday,
+      'start_minutes': startMinutes,
+      'end_minutes': endMinutes,
+      'break_minutes': breakMinutes,
+    }, conflictAlgorithm: ConflictAlgorithm.replace);
   }
 
-  Future<void> clearWorkTimeSetting(
-    int weekday,
-  ) async {
+  Future<void> clearWorkTimeSetting(int weekday) async {
     final db = await database;
 
     await db.delete(
@@ -1430,267 +1224,441 @@ class AppDatabase {
   Future<void> deleteAdvertising(String id) async {
     final db = await database;
 
-    await db.delete(
-      'advertising',
-      where: 'id = ?',
-      whereArgs: [id],
-    );
+    await db.delete('advertising', where: 'id = ?', whereArgs: [id]);
   }
 
+  // Ein Backup muss einen konsistenten Datenbank-Snapshot enthalten.
+  // Die Tabellen werden deshalb innerhalb einer Lesetransaktion exportiert.
   Future<Map<String, Object?>> exportBackupData() async {
     final db = await database;
 
-    return {
-      'backup_version': 1,
-      'database_version': _databaseVersion,
-      'created_at': DateTime.now().toIso8601String(),
-      'tables': {
-        'zsp_locations': await db.query(
+    final tables = await db.transaction((txn) async {
+      return <String, List<Map<String, Object?>>>{
+        'zsp_locations': await txn.query(
           'zsp_locations',
           orderBy: 'is_default DESC, name COLLATE NOCASE ASC',
         ),
-        'districts': await db.query(
+        'districts': await txn.query(
           'districts',
           orderBy: 'zsp_id ASC, number ASC',
         ),
-        'work_days': await db.query(
-          'work_days',
-          orderBy: 'date ASC',
-        ),
-        'own_tour_entries': await db.query(
+        'work_days': await txn.query('work_days', orderBy: 'date ASC'),
+        'own_tour_entries': await txn.query(
           'own_tour_entries',
           orderBy: 'id ASC',
         ),
-        'support_entries': await db.query(
+        'support_entries': await txn.query(
           'support_entries',
           orderBy: 'id ASC',
         ),
-        'package_driver_entries': await db.query(
+        'package_driver_entries': await txn.query(
           'package_driver_entries',
           orderBy: 'id ASC',
         ),
-        'monday_delivery_entries': await db.query(
+        'monday_delivery_entries': await txn.query(
           'monday_delivery_entries',
           orderBy: 'id ASC',
         ),
-        'work_schedule_entries': await db.query(
+        'work_schedule_entries': await txn.query(
           'work_schedule_entries',
           orderBy: 'date ASC',
         ),
-        'work_time_settings': await db.query(
+        'work_time_settings': await txn.query(
           'work_time_settings',
           orderBy: 'weekday ASC',
         ),
-        'advertising': await db.query(
+        'advertising': await txn.query(
           'advertising',
           orderBy: 'name COLLATE NOCASE ASC',
         ),
+      };
+    }, exclusive: false);
+
+    return {
+      // Version 1 bleibt für bestehende TourLog-Backups kompatibel.
+      'backup_version': 1,
+      'database_version': _databaseVersion,
+      'created_at': DateTime.now().toIso8601String(),
+      // Seit dieser Version ermöglichen Zähler die Erkennung von
+      // unvollständig exportierten Tabellen. Alte Backups haben sie nicht.
+      'table_counts': {
+        for (final entry in tables.entries) entry.key: entry.value.length,
       },
+      'tables': tables,
     };
   }
 
-  Future<void> importBackupData(
-    Map<String, Object?> backup,
-  ) async {
-    final backupVersion = backup['backup_version'];
+  /// Prüft ein Backup ohne Änderungen an der Datenbank und liefert die
+  /// Datensatz-Anzahlen für eine zukünftige Bestätigungs-/Vorschauansicht.
+  Map<String, int> inspectBackupData(Map<String, Object?> backup) {
+    final tables = _validatedBackupTables(backup);
+    return {for (final entry in tables.entries) entry.key: entry.value.length};
+  }
 
-    if (backupVersion != 1) {
+  // Diese Prüfung findet vollständig VOR der ersten Löschoperation statt.
+  Map<String, List<Map<String, Object?>>> _validatedBackupTables(
+    Map<String, Object?> backup,
+  ) {
+    if (backup['backup_version'] != 1) {
       throw const FormatException(
         'Diese Backup-Version wird nicht unterstützt.',
       );
     }
 
-    final tablesValue = backup['tables'];
-
-    if (tablesValue is! Map) {
+    final sourceVersion = backup['database_version'];
+    if (sourceVersion is! int || sourceVersion < 5) {
       throw const FormatException(
-        'Das Backup enthält keine gültigen Tabellendaten.',
+        'Das Backup hat keine unterstützte Datenbankversion.',
+      );
+    }
+    if (sourceVersion > _databaseVersion) {
+      throw const FormatException(
+        'Dieses Backup stammt aus einer neueren TourLog-Version. '
+        'Bitte zuerst die App aktualisieren.',
       );
     }
 
-    final tables = Map<String, Object?>.from(
-      tablesValue,
-    );
+    final rawTables = backup['tables'];
+    if (rawTables is! Map) {
+      throw const FormatException(
+        'Das Backup enthält keine gültigen Tabellen.',
+      );
+    }
 
-    const requiredTables = [
+    // Historische optionale Tabellen wurden erst mit diesen Versionen
+    // eingeführt. Bei Backups aus neueren Versionen müssen sie vorhanden sein.
+    const introducedInVersion = <String, int>{
+      'zsp_locations': 7,
+      'districts': 1,
+      'work_days': 1,
+      'own_tour_entries': 3,
+      'support_entries': 1,
+      'package_driver_entries': 8,
+      'monday_delivery_entries': 9,
+      'work_schedule_entries': 4,
+      'work_time_settings': 5,
+      'advertising': 6,
+    };
+    final tables = <String, List<Map<String, Object?>>>{};
+
+    for (final entry in introducedInVersion.entries) {
+      final name = entry.key;
+      final rawRows = rawTables[name];
+      if (rawRows == null && sourceVersion < entry.value) {
+        tables[name] = <Map<String, Object?>>[];
+        continue;
+      }
+      if (rawRows is! List) {
+        throw FormatException('Im Backup fehlt die Tabelle "$name".');
+      }
+      final rows = <Map<String, Object?>>[];
+      for (var index = 0; index < rawRows.length; index++) {
+        final item = rawRows[index];
+        if (item is! Map || item.keys.any((key) => key is! String)) {
+          throw FormatException(
+            'Ungültiger Datensatz in "$name" (${index + 1}).',
+          );
+        }
+        rows.add(Map<String, Object?>.from(item));
+      }
+      tables[name] = rows;
+    }
+
+    // Neue Sicherungen enthalten Zähler. Stimmen diese nicht, kann eine
+    // Tabelle abgeschnitten worden sein; die Wiederherstellung wird gesperrt.
+    final counts = backup['table_counts'];
+    if (counts != null) {
+      if (counts is! Map) {
+        throw const FormatException('Ungültige Tabellenzähler im Backup.');
+      }
+      for (final entry in tables.entries) {
+        final expected = counts[entry.key];
+        if (expected is! int || expected != entry.value.length) {
+          throw FormatException(
+            'Die Tabelle "${entry.key}" ist unvollständig oder verändert.',
+          );
+        }
+      }
+    }
+
+    // Alte Backups vor Einführung der ZSP-Tabelle gehören zum Standard-ZSP.
+    if (sourceVersion < 7 && tables['zsp_locations']!.isEmpty) {
+      tables['zsp_locations'] = [
+        {
+          'id': ZspLocation.werneckId,
+          'name': 'ZSP Werneck',
+          'is_default': 1,
+          'is_active': 1,
+        },
+      ];
+    }
+
+    final defaultZsp = ZspLocation.werneckId;
+    for (final name in [
       'districts',
       'work_days',
       'own_tour_entries',
       'support_entries',
-      'work_schedule_entries',
-      'work_time_settings',
-    ];
+      'package_driver_entries',
+      'monday_delivery_entries',
+    ]) {
+      for (final row in tables[name]!) {
+        row.putIfAbsent('zsp_id', () => defaultZsp);
+      }
+    }
+    for (final row in tables['work_days']!) {
+      row.putIfAbsent('package_driver_package_count', () => 0);
+      row.putIfAbsent('monday_delivery_package_count', () => 0);
+      // Bei Updates von sehr alten Datenbanken können diese inzwischen
+      // ersetzten Spalten noch physisch existieren. Auf Neuinstallationen
+      // fehlen sie; ihre Inhalte wurden bereits in die neuen Felder migriert.
+      row.remove('is_package_driver');
+      row.remove('delivery_start');
+    }
 
-    for (final tableName in requiredTables) {
-      if (tables[tableName] is! List) {
-        throw FormatException(
-          'Im Backup fehlt die Tabelle "$tableName".',
-        );
+    // Erforderliche Werte und Typen prüfen. Unbekannte historische Spalten
+    // werden nicht stillschweigend verworfen; SQLite darf sie ggf. ablehnen,
+    // wobei die Transaktion vollständig zurückgerollt wird.
+    const textFields = <String, List<String>>{
+      'zsp_locations': ['id', 'name'],
+      'districts': ['zsp_id'],
+      'work_days': ['id', 'date', 'type', 'zsp_id'],
+      'own_tour_entries': ['work_day_id', 'district', 'zsp_id'],
+      'support_entries': ['work_day_id', 'district', 'zsp_id'],
+      'package_driver_entries': ['work_day_id', 'district', 'zsp_id'],
+      'monday_delivery_entries': ['work_day_id', 'district', 'zsp_id'],
+      'work_schedule_entries': ['id', 'date', 'type'],
+      'advertising': ['id', 'name'],
+    };
+    const numberFields = <String, List<String>>{
+      'zsp_locations': ['is_default', 'is_active'],
+      'districts': ['number', 'is_active', 'can_drive_safely'],
+      'work_days': [
+        'break_minutes',
+        'package_count',
+        'cancelled_package_count',
+        'package_driver_package_count',
+        'monday_delivery_package_count',
+        'has_advertising',
+      ],
+      'own_tour_entries': ['package_count', 'cancelled_package_count'],
+      'support_entries': ['packages_taken'],
+      'work_time_settings': ['weekday'],
+    };
+    const optionalNumbers = <String, List<String>>{
+      'own_tour_entries': ['id'],
+      'support_entries': ['id'],
+      'package_driver_entries': ['id'],
+      'monday_delivery_entries': ['id'],
+      'work_days': ['work_start', 'departure_time', 'delivery_end', 'work_end'],
+      'work_time_settings': ['start_minutes', 'end_minutes', 'break_minutes'],
+    };
+    const optionalTexts = <String, List<String>>{
+      'districts': ['note'],
+      'work_days': [
+        'assignment_type',
+        'district_id',
+        'district_part',
+        'advertising',
+        'notes',
+      ],
+      'own_tour_entries': ['district_part'],
+      'support_entries': ['note'],
+      'work_schedule_entries': ['districts', 'notes'],
+    };
+
+    for (final entry in tables.entries) {
+      final name = entry.key;
+      for (final row in entry.value) {
+        for (final field in textFields[name] ?? const <String>[]) {
+          final value = row[field];
+          if (value is! String || value.trim().isEmpty) {
+            throw FormatException('Ungültiger Textwert: $name.$field');
+          }
+        }
+        for (final field in numberFields[name] ?? const <String>[]) {
+          if (row[field] is! int) {
+            throw FormatException('Ungültiger Zahlenwert: $name.$field');
+          }
+        }
+        for (final field in optionalNumbers[name] ?? const <String>[]) {
+          if (row[field] != null && row[field] is! int) {
+            throw FormatException('Ungültiger Zahlenwert: $name.$field');
+          }
+        }
+        for (final field in optionalTexts[name] ?? const <String>[]) {
+          if (row[field] != null && row[field] is! String) {
+            throw FormatException('Ungültiger Textwert: $name.$field');
+          }
+        }
       }
     }
 
-    List<Map<String, Object?>> readRows(
-      String tableName,
-    ) {
-      final rows = tables[tableName] as List;
-
-      return rows.map((row) {
-        if (row is! Map) {
-          throw FormatException(
-            'Ungültige Daten in "$tableName".',
-          );
+    void unique(String tableName, String Function(Map<String, Object?>) key) {
+      final keys = <String>{};
+      for (final row in tables[tableName]!) {
+        if (!keys.add(key(row))) {
+          throw FormatException('Doppelte Schlüssel in "$tableName".');
         }
-
-        return Map<String, Object?>.from(row);
-      }).toList();
+      }
     }
 
-    final zspLocations = tables['zsp_locations'] is List
-        ? readRows('zsp_locations')
-        : <Map<String, Object?>>[
-            {
-              'id': ZspLocation.werneckId,
-              'name': 'ZSP Werneck',
-              'is_default': 1,
-              'is_active': 1,
-            },
-          ];
-    final districts = readRows('districts');
-    final workDays = readRows('work_days');
-    final ownTourEntries =
-        readRows('own_tour_entries');
-    final supportEntries =
-        readRows('support_entries');
-    final packageDriverEntries = tables['package_driver_entries'] is List
-        ? readRows('package_driver_entries')
-        : <Map<String, Object?>>[];
-    final mondayDeliveryEntries = tables['monday_delivery_entries'] is List
-        ? readRows('monday_delivery_entries')
-        : <Map<String, Object?>>[];
-    final workScheduleEntries =
-        readRows('work_schedule_entries');
-    final workTimeSettings =
-        readRows('work_time_settings');
-    final advertising = tables['advertising'] is List
-        ? readRows('advertising')
-        : <Map<String, Object?>>[];
+    unique('zsp_locations', (row) => row['id'] as String);
+    unique('districts', (row) => '${row['zsp_id']}:${row['number']}');
+    unique('work_days', (row) => row['id'] as String);
+    unique('work_schedule_entries', (row) => row['id'] as String);
+    unique('advertising', (row) => row['id'] as String);
+    unique('work_time_settings', (row) => '${row['weekday']}');
+    unique('work_days', (row) => 'date:${row['date']}');
+    unique('work_schedule_entries', (row) => 'date:${row['date']}');
+    unique('zsp_locations', (row) => 'name:${row['name']}');
+    unique('advertising', (row) => 'name:${row['name']}');
 
+    for (final name in [
+      'own_tour_entries',
+      'support_entries',
+      'package_driver_entries',
+      'monday_delivery_entries',
+    ]) {
+      final seen = <int>{};
+      for (final row in tables[name]!) {
+        final id = row['id'];
+        if (id is int && !seen.add(id)) {
+          throw FormatException('Doppelte IDs in "$name".');
+        }
+      }
+    }
+
+    final zspIds = tables['zsp_locations']!
+        .map((row) => row['id'] as String)
+        .toSet();
+    final workDayIds = tables['work_days']!
+        .map((row) => row['id'] as String)
+        .toSet();
+
+    for (final name in ['districts', 'work_days']) {
+      for (final row in tables[name]!) {
+        if (!zspIds.contains(row['zsp_id'])) {
+          throw FormatException('Unbekannter Standort in "$name".');
+        }
+      }
+    }
+    for (final name in [
+      'own_tour_entries',
+      'support_entries',
+      'package_driver_entries',
+      'monday_delivery_entries',
+    ]) {
+      for (final row in tables[name]!) {
+        if (!workDayIds.contains(row['work_day_id'])) {
+          throw FormatException('Verwaister Arbeitstag-Verweis in "$name".');
+        }
+      }
+    }
+    for (final name in ['work_days', 'work_schedule_entries']) {
+      for (final row in tables[name]!) {
+        if (DateTime.tryParse(row['date'] as String) == null) {
+          throw FormatException('Ungültiges Datum in "$name".');
+        }
+      }
+    }
+    for (final row in tables['work_time_settings']!) {
+      final weekday = row['weekday'] as int;
+      if (weekday < 1 || weekday > 7) {
+        throw const FormatException('Ungültiger Wochentag im Backup.');
+      }
+    }
+
+    return tables;
+  }
+
+  Future<void> importBackupData(Map<String, Object?> backup) async {
+    // WICHTIG: Erst vollständig prüfen, dann Datenbank öffnen/verändern.
+    final tables = _validatedBackupTables(backup);
     final db = await database;
 
+    // Ein leerer/abgeschnittener Datensatz darf keine vorhandenen
+    // Arbeitstage unbemerkt löschen. Ein bewusster Komplett-Reset gehört
+    // nicht zur Wiederherstellungsfunktion.
+    if (tables['work_days']!.isEmpty) {
+      final existingCount =
+          Sqflite.firstIntValue(
+            await db.rawQuery('SELECT COUNT(*) FROM work_days'),
+          ) ??
+          0;
+      if (existingCount > 0) {
+        throw const FormatException(
+          'Das Backup enthält keine Arbeitstage. '
+          'Die vorhandenen Arbeitsdaten werden deshalb nicht ersetzt.',
+        );
+      }
+    }
+
+    const deleteOrder = [
+      'own_tour_entries',
+      'support_entries',
+      'package_driver_entries',
+      'monday_delivery_entries',
+      'work_days',
+      'work_schedule_entries',
+      'work_time_settings',
+      'advertising',
+      'districts',
+      'zsp_locations',
+    ];
+    const insertOrder = [
+      'zsp_locations',
+      'districts',
+      'work_days',
+      'own_tour_entries',
+      'support_entries',
+      'package_driver_entries',
+      'monday_delivery_entries',
+      'work_schedule_entries',
+      'work_time_settings',
+      'advertising',
+    ];
+
     await db.transaction((txn) async {
-      await txn.delete('own_tour_entries');
-      await txn.delete('support_entries');
-      await txn.delete('package_driver_entries');
-      await txn.delete('monday_delivery_entries');
-      await txn.delete('work_days');
-      await txn.delete('work_schedule_entries');
-      await txn.delete('work_time_settings');
-      await txn.delete('advertising');
-      await txn.delete('districts');
-      await txn.delete('zsp_locations');
-
-      for (final row in zspLocations) {
-        await txn.insert(
-          'zsp_locations',
-          row,
-          conflictAlgorithm: ConflictAlgorithm.replace,
-        );
+      for (final name in deleteOrder) {
+        await txn.delete(name);
+      }
+      for (final name in insertOrder) {
+        for (final row in tables[name]!) {
+          // ABORT statt REPLACE: Kein stilles Überschreiben bei Kollisionen.
+          await txn.insert(
+            name,
+            row,
+            conflictAlgorithm: ConflictAlgorithm.abort,
+          );
+        }
       }
 
-      for (final originalRow in districts) {
-        final row = Map<String, Object?>.from(originalRow);
-        row.putIfAbsent('zsp_id', () => ZspLocation.werneckId);
-        await txn.insert(
-          'districts',
-          row,
-          conflictAlgorithm: ConflictAlgorithm.replace,
+      // Zusätzliche Konsistenzprüfung noch innerhalb der Transaktion.
+      // Jeder Fehler wirft eine Exception und rollt sämtliche Änderungen zurück.
+      final foreignKeyErrors = await txn.rawQuery('PRAGMA foreign_key_check');
+      if (foreignKeyErrors.isNotEmpty) {
+        throw const FormatException(
+          'Das Backup enthält ungültige Verknüpfungen zwischen Datensätzen.',
         );
       }
-
-      for (final originalRow in workDays) {
-        final row = Map<String, Object?>.from(originalRow);
-        row.putIfAbsent('zsp_id', () => ZspLocation.werneckId);
-        row.putIfAbsent('package_driver_package_count', () => 0);
-        row.putIfAbsent('monday_delivery_package_count', () => 0);
-        await txn.insert(
-          'work_days',
-          row,
-          conflictAlgorithm: ConflictAlgorithm.replace,
-        );
-      }
-
-      for (final originalRow in ownTourEntries) {
-        final row = Map<String, Object?>.from(originalRow);
-        row.putIfAbsent('zsp_id', () => ZspLocation.werneckId);
-        await txn.insert(
-          'own_tour_entries',
-          row,
-          conflictAlgorithm: ConflictAlgorithm.replace,
-        );
-      }
-
-      for (final originalRow in supportEntries) {
-        final row = Map<String, Object?>.from(originalRow);
-        row.putIfAbsent('zsp_id', () => ZspLocation.werneckId);
-        await txn.insert(
-          'support_entries',
-          row,
-          conflictAlgorithm: ConflictAlgorithm.replace,
-        );
-      }
-
-      for (final originalRow in packageDriverEntries) {
-        final row = Map<String, Object?>.from(originalRow);
-        row.putIfAbsent('zsp_id', () => ZspLocation.werneckId);
-        await txn.insert(
-          'package_driver_entries',
-          row,
-          conflictAlgorithm: ConflictAlgorithm.replace,
-        );
-      }
-
-      for (final originalRow in mondayDeliveryEntries) {
-        final row = Map<String, Object?>.from(originalRow);
-        row.putIfAbsent('zsp_id', () => ZspLocation.werneckId);
-        await txn.insert(
-          'monday_delivery_entries',
-          row,
-          conflictAlgorithm: ConflictAlgorithm.replace,
-        );
-      }
-
-      for (final row in workScheduleEntries) {
-        await txn.insert(
-          'work_schedule_entries',
-          row,
-          conflictAlgorithm: ConflictAlgorithm.replace,
-        );
-      }
-
-      for (final row in workTimeSettings) {
-        await txn.insert(
-          'work_time_settings',
-          row,
-          conflictAlgorithm: ConflictAlgorithm.replace,
-        );
-      }
-
-      for (final row in advertising) {
-        await txn.insert(
-          'advertising',
-          row,
-          conflictAlgorithm: ConflictAlgorithm.replace,
-        );
+      for (final name in insertOrder) {
+        final count =
+            Sqflite.firstIntValue(
+              await txn.rawQuery('SELECT COUNT(*) FROM $name'),
+            ) ??
+            -1;
+        if (count != tables[name]!.length) {
+          throw FormatException(
+            'Anzahl der Datensätze in "$name" stimmt nicht.',
+          );
+        }
       }
     });
   }
 
   String _normalizeDate(DateTime date) {
-    return DateTime(
-      date.year,
-      date.month,
-      date.day,
-    ).toIso8601String();
+    return DateTime(date.year, date.month, date.day).toIso8601String();
   }
 
   int _readIntValue(Object? value) {

@@ -28,6 +28,7 @@ class _StatisticsPageState
     extends ConsumerState<StatisticsPage> {
   StatisticsPeriod _selectedPeriod =
       StatisticsPeriod.month;
+  int _periodOffset = 0;
 
   @override
   Widget build(BuildContext context) {
@@ -109,6 +110,7 @@ class _StatisticsPageState
     final dateRange = _getDateRange(
       today,
       _selectedPeriod,
+      _periodOffset,
     );
 
     final filteredWorkDays = workDays.where(
@@ -228,10 +230,71 @@ class _StatisticsPageState
             onSelectionChanged: (selection) {
               setState(() {
                 _selectedPeriod = selection.first;
+                _periodOffset = 0;
               });
             },
           ),
         ),
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            IconButton.filledTonal(
+              tooltip: 'Vorheriger Zeitraum',
+              onPressed: () {
+                setState(() {
+                  _periodOffset--;
+                });
+              },
+              icon: const Icon(Icons.chevron_left),
+            ),
+            Expanded(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    _periodDescription(dateRange),
+                    textAlign: TextAlign.center,
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.w700,
+                        ),
+                  ),
+                  if (_periodOffset == 0)
+                    Text(
+                      'Aktueller Zeitraum',
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            color: Theme.of(context)
+                                .colorScheme
+                                .onSurfaceVariant,
+                          ),
+                    ),
+                ],
+              ),
+            ),
+            IconButton.filledTonal(
+              tooltip: 'Nächster Zeitraum',
+              onPressed: _periodOffset >= 0
+                  ? null
+                  : () {
+                      setState(() {
+                        _periodOffset++;
+                      });
+                    },
+              icon: const Icon(Icons.chevron_right),
+            ),
+          ],
+        ),
+        if (_periodOffset != 0)
+          Center(
+            child: TextButton.icon(
+              onPressed: () {
+                setState(() {
+                  _periodOffset = 0;
+                });
+              },
+              icon: const Icon(Icons.today_outlined),
+              label: const Text('Zum aktuellen Zeitraum'),
+            ),
+          ),
         const SizedBox(height: 26),
         const _StatisticsSectionTitle(
           icon: Icons.dashboard_outlined,
@@ -261,6 +324,7 @@ class _StatisticsPageState
         ),
         const SizedBox(height: 12),
         _WorkTimeBalanceStatistics(
+          key: ValueKey('balance_${_selectedPeriod.name}_$_periodOffset'),
           workDays: filteredWorkDays,
         ),
         const SizedBox(height: 12),
@@ -320,6 +384,7 @@ class _StatisticsPageState
         ),
         const SizedBox(height: 10),
         _PackageDistrictStatistics(
+          key: ValueKey('packages_${_selectedPeriod.name}_$_periodOffset'),
           startDate: dateRange.start,
           endDate: dateRange.end,
           workDays: ownDistrictWorkDays,
@@ -334,55 +399,29 @@ class _StatisticsPageState
   _DateRange _getDateRange(
     DateTime today,
     StatisticsPeriod period,
+    int offset,
   ) {
     switch (period) {
       case StatisticsPeriod.week:
-        final start = today.subtract(
-          Duration(
-            days: today.weekday -
-                DateTime.monday,
-          ),
-        );
-
-        final end = start.add(
-          const Duration(days: 6),
-        );
-
-        return _DateRange(
-          start: start,
-          end: end,
-        );
-
-      case StatisticsPeriod.month:
+        // Calendar dates rather than Duration avoid daylight-saving shifts.
         final start = DateTime(
           today.year,
           today.month,
-          1,
+          today.day - (today.weekday - DateTime.monday) + offset * 7,
         );
+        final end = DateTime(start.year, start.month, start.day + 6);
+        return _DateRange(start: start, end: end);
 
-        final end = DateTime(
-          today.year,
-          today.month + 1,
-          0,
-        );
-
-        return _DateRange(
-          start: start,
-          end: end,
-        );
+      case StatisticsPeriod.month:
+        final start = DateTime(today.year, today.month + offset, 1);
+        final end = DateTime(start.year, start.month + 1, 0);
+        return _DateRange(start: start, end: end);
 
       case StatisticsPeriod.year:
+        final year = today.year + offset;
         return _DateRange(
-          start: DateTime(
-            today.year,
-            1,
-            1,
-          ),
-          end: DateTime(
-            today.year,
-            12,
-            31,
-          ),
+          start: DateTime(year, 1, 1),
+          end: DateTime(year, 12, 31),
         );
     }
   }
@@ -605,6 +644,7 @@ class _StatisticsSectionTitle extends StatelessWidget {
 
 class _WorkTimeBalanceStatistics extends StatelessWidget {
   const _WorkTimeBalanceStatistics({
+    super.key,
     required this.workDays,
   });
 
@@ -695,6 +735,7 @@ class _WorkTimeBalanceStatistics extends StatelessWidget {
 class _PackageDistrictStatistics
     extends ConsumerWidget {
   const _PackageDistrictStatistics({
+    super.key,
     required this.startDate,
     required this.endDate,
     required this.workDays,

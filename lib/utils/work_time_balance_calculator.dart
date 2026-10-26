@@ -10,11 +10,8 @@ class WorkTimeBalanceCalculator {
   ///
   /// Ergebnis in Minuten, bereits abzüglich der eingestellten Soll-Pause.
   /// Gibt null zurück, wenn für den Wochentag keine Sollzeit hinterlegt ist.
-  static Future<int?> getTargetMinutesForDate(
-    DateTime date,
-  ) async {
-    final setting =
-        await _database.getWorkTimeSettingForWeekday(date.weekday);
+  static Future<int?> getTargetMinutesForDate(DateTime date) async {
+    final setting = await _database.getWorkTimeSettingForWeekday(date.weekday);
 
     if (setting == null) {
       return null;
@@ -28,8 +25,7 @@ class WorkTimeBalanceCalculator {
       return null;
     }
 
-    final targetMinutes =
-        endMinutes - startMinutes - breakMinutes;
+    final targetMinutes = endMinutes - startMinutes - breakMinutes;
 
     if (targetMinutes < 0) {
       return null;
@@ -44,9 +40,7 @@ class WorkTimeBalanceCalculator {
   /// Negativ = Minuszeit
   /// 0 = Soll genau erreicht
   /// null = Berechnung nicht möglich
-  static Future<int?> getBalanceMinutesForWorkDay(
-    WorkDay workDay,
-  ) async {
+  static Future<int?> getBalanceMinutesForWorkDay(WorkDay workDay) async {
     if (!workDay.isWorkDay) {
       return null;
     }
@@ -57,8 +51,7 @@ class WorkTimeBalanceCalculator {
       return null;
     }
 
-    final targetMinutes =
-        await getTargetMinutesForDate(workDay.date);
+    final targetMinutes = await getTargetMinutesForDate(workDay.date);
 
     if (targetMinutes == null) {
       return null;
@@ -69,19 +62,20 @@ class WorkTimeBalanceCalculator {
 
   /// Gesamte Soll-Arbeitszeit für einen Zeitraum.
   ///
-  /// Es werden nur tatsächlich eingetragene Arbeitstage berücksichtigt.
+  /// Berücksichtigt nur Arbeitstage, für die sowohl eine tatsächliche
+  /// Arbeitszeit als auch eine Sollzeit berechenbar ist. Dadurch beziehen
+  /// sich Soll, Ist und Plus/Minus auf dieselben Arbeitstage.
   static Future<int> getTargetMinutesForWorkDays(
     Iterable<WorkDay> workDays,
   ) async {
     var total = 0;
 
     for (final workDay in workDays) {
-      if (!workDay.isWorkDay) {
+      if (!workDay.isWorkDay || workDay.workDurationMinutes == null) {
         continue;
       }
 
-      final targetMinutes =
-          await getTargetMinutesForDate(workDay.date);
+      final targetMinutes = await getTargetMinutesForDate(workDay.date);
 
       if (targetMinutes != null) {
         total += targetMinutes;
@@ -109,8 +103,7 @@ class WorkTimeBalanceCalculator {
         continue;
       }
 
-      final targetMinutes =
-          await getTargetMinutesForDate(workDay.date);
+      final targetMinutes = await getTargetMinutesForDate(workDay.date);
 
       if (targetMinutes == null) {
         continue;
@@ -132,8 +125,7 @@ class WorkTimeBalanceCalculator {
     var total = 0;
 
     for (final workDay in workDays) {
-      final balance =
-          await getBalanceMinutesForWorkDay(workDay);
+      final balance = await getBalanceMinutesForWorkDay(workDay);
 
       if (balance != null) {
         total += balance;

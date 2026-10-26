@@ -161,7 +161,12 @@ class _AddWorkDayPageState extends ConsumerState<AddWorkDayPage> {
             legacyPart == DistrictPart.partB) {
           _dayPostPart = legacyPart;
         }
-      } else if (existingWorkDay.type == WorkDayType.work &&
+      }
+
+      // Alte Arbeitstage nur dann uebernehmen, wenn keine eigenen
+      // Bezirkseintraege vorhanden sind. Sonst entstehen Duplikate.
+      if (_ownTourDrafts.isEmpty &&
+          existingWorkDay.type == WorkDayType.work &&
           existingWorkDay.assignmentType ==
               WorkAssignmentType.ownDistrict &&
           existingWorkDay.districtId != null) {
